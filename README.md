@@ -2,6 +2,8 @@
 
 A web-based Kubernetes dashboard built with SolidJS and Fastify. Provides a modern UI for viewing and managing Kubernetes resources with real-time updates.
 
+![example](./example.jpg)
+
 ## Features
 
 ### Core Kubernetes Resources
