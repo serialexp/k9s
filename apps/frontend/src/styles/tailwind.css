@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+@plugin "daisyui" {
+  themes: corporate --default, business --prefersdark;
+}
+
+@layer utilities {
+  .h-resource-panel {
+    height: calc(100vh - 12.5rem);
+  }
+}

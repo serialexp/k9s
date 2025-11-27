@@ -1,0 +1,19 @@
+{
+  "name": "k9s-dashboard",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/frontend",
+    "apps/backend"
+  ],
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter k9s-dashboard-backend dev\" \"pnpm --filter k9s-dashboard-frontend dev\"",
+    "dev:backend": "pnpm --filter k9s-dashboard-backend dev",
+    "dev:frontend": "pnpm --filter k9s-dashboard-frontend dev"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "packageManager": "pnpm@9.0.0"
+}
