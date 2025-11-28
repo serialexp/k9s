@@ -32,6 +32,7 @@ export interface NodeListItem {
   status: string;
   roles: string[];
   nodePool?: string;
+  instanceType?: string;
   architecture?: string;
   kubeletVersion?: string;
   internalIP?: string;
@@ -50,12 +51,63 @@ export interface NodeListItem {
   cpuRequests?: string;
   memoryRequests?: string;
   blockers?: NodeBlocker[];
-  largestPods: Array<{
+  pods: Array<{
     name: string;
     namespace: string;
     cpuRequests?: string;
     memoryRequests?: string;
+    cpuUsage?: string;
+    memoryUsage?: string;
   }>;
+}
+
+export interface NodeCondition {
+  type: string;
+  status: string;
+  reason?: string;
+  message?: string;
+  lastHeartbeatTime?: string;
+  lastTransitionTime?: string;
+}
+
+export interface NodeDetail extends NodeListItem {
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  taints: Array<{
+    key: string;
+    value?: string;
+    effect: string;
+  }>;
+  conditions: NodeCondition[];
+  nodeInfo: {
+    machineID?: string;
+    systemUUID?: string;
+    bootID?: string;
+    kernelVersion?: string;
+    osImage?: string;
+    containerRuntimeVersion?: string;
+    kubeletVersion?: string;
+    kubeProxyVersion?: string;
+    operatingSystem?: string;
+    architecture?: string;
+  };
+  addresses: Array<{
+    type: string;
+    address: string;
+  }>;
+  podCIDR?: string;
+  podCIDRs?: string[];
+  providerID?: string;
+}
+
+export interface NodeEvent {
+  type: string;
+  reason: string;
+  message: string;
+  count?: number;
+  firstTimestamp?: string;
+  lastTimestamp?: string;
+  source?: string;
 }
 
 export interface NodePoolSummary {
@@ -1212,6 +1264,41 @@ export async function fetchNodes(): Promise<NodeListResponse> {
     items: data.items,
     pools: data.pools ?? []
   };
+}
+
+export async function fetchNode(name: string): Promise<NodeDetail> {
+  return apiFetch<NodeDetail>(`/nodes/${encodeURIComponent(name)}`);
+}
+
+export async function fetchNodeManifest(name: string): Promise<string> {
+  const response = await fetch(`${API_BASE}/nodes/${encodeURIComponent(name)}/manifest`);
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Failed to load manifest (${response.status})`);
+  }
+  return response.text();
+}
+
+export async function fetchNodeEvents(name: string): Promise<NodeEvent[]> {
+  const data = await apiFetch<{ events: NodeEvent[] }>(`/nodes/${encodeURIComponent(name)}/events`);
+  return data.events;
+}
+
+export async function cordonNode(name: string): Promise<void> {
+  await fetch(`${API_BASE}/nodes/${encodeURIComponent(name)}/cordon`, { method: 'POST' });
+}
+
+export async function uncordonNode(name: string): Promise<void> {
+  await fetch(`${API_BASE}/nodes/${encodeURIComponent(name)}/uncordon`, { method: 'POST' });
+}
+
+export async function drainNode(name: string): Promise<{ evictedPods: string[] }> {
+  const response = await fetch(`${API_BASE}/nodes/${encodeURIComponent(name)}/drain`, { method: 'POST' });
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Failed to drain node (${response.status})`);
+  }
+  return response.json();
 }
 
 export async function fetchNamespaceSummaries(): Promise<NamespaceSummary[]> {

@@ -21,6 +21,7 @@ import PersistentVolumeClaimListPage from './routes/PersistentVolumeClaimListPag
 import StorageClassListPage from './routes/StorageClassListPage';
 import NodeClassListPage from './routes/NodeClassListPage';
 import NodePoolListPage from './routes/NodePoolListPage';
+import NodePoolSummaryPage from './routes/NodePoolSummaryPage';
 import NotFound from './routes/NotFound';
 import NodeListPage from './routes/NodeListPage';
 import NamespaceListPage from './routes/NamespaceListPage';
@@ -85,6 +86,23 @@ const App = () => {
           <Route path="/:context/:namespace/nodes" component={() => (
             <LayoutWrapper>
               <NodeListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/nodes/:resourceName" component={() => (
+            <LayoutWrapper>
+              <NodeListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/nodes/:resourceName/:tab" component={() => (
+            <LayoutWrapper>
+              <NodeListPage />
+            </LayoutWrapper>
+          )} />
+
+          {/* Node Pool Summary route */}
+          <Route path="/:context/:namespace/node-pool-summary" component={() => (
+            <LayoutWrapper>
+              <NodePoolSummaryPage />
             </LayoutWrapper>
           )} />
 

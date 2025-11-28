@@ -58,6 +58,65 @@ export const apiPlugin: FastifyPluginAsync<ApiPluginOptions> = async (fastify, o
     }
   });
 
+  fastify.get<{ Params: { node: string } }>('/nodes/:node', async (request, reply) => {
+    const { node } = request.params;
+    if (!node) {
+      reply.code(400);
+      return { error: 'node name is required' };
+    }
+    const detail = await kube.getNode(node);
+    return detail;
+  });
+
+  fastify.get<{ Params: { node: string } }>('/nodes/:node/manifest', async (request, reply) => {
+    const { node } = request.params;
+    const manifest = await kube.getNodeManifest(node);
+    reply.header('content-type', 'application/yaml');
+    return yaml.stringify(JSON.parse(manifest));
+  });
+
+  fastify.get<{ Params: { node: string } }>('/nodes/:node/events', async (request, reply) => {
+    const { node } = request.params;
+    if (!node) {
+      reply.code(400);
+      return { error: 'node name is required' };
+    }
+    const events = await kube.getNodeEvents(node);
+    return { events };
+  });
+
+  fastify.post<{ Params: { node: string } }>('/nodes/:node/cordon', async (request, reply) => {
+    const { node } = request.params;
+    if (!node) {
+      reply.code(400);
+      return { error: 'node name is required' };
+    }
+    await kube.cordonNode(node);
+    reply.code(204);
+    return null;
+  });
+
+  fastify.post<{ Params: { node: string } }>('/nodes/:node/uncordon', async (request, reply) => {
+    const { node } = request.params;
+    if (!node) {
+      reply.code(400);
+      return { error: 'node name is required' };
+    }
+    await kube.uncordonNode(node);
+    reply.code(204);
+    return null;
+  });
+
+  fastify.post<{ Params: { node: string } }>('/nodes/:node/drain', async (request, reply) => {
+    const { node } = request.params;
+    if (!node) {
+      reply.code(400);
+      return { error: 'node name is required' };
+    }
+    const result = await kube.drainNode(node);
+    return result;
+  });
+
   fastify.get('/namespace-summaries', async (request, reply) => {
     try {
       const namespaces = await kube.listNamespaceSummaries();

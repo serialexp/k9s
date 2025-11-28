@@ -1,5 +1,5 @@
 import { useNavigate, useParams, useLocation } from '@solidjs/router';
-import { createEffect } from 'solid-js';
+import { createEffect, on } from 'solid-js';
 import Layout from './Layout';
 import { contextStore } from '../stores/contextStore';
 
@@ -49,22 +49,25 @@ const LayoutWrapper = (props: LayoutWrapperProps) => {
     return 'pods';
   };
 
-  createEffect(() => {
-    const contextFromUrl = decodedContext();
-    const namespaceFromUrl = decodedNamespace();
+  // Sync store with URL when URL changes (e.g., browser back/forward, direct navigation)
+  // Using on() to explicitly track only URL params, preventing interference when
+  // handleContextChange updates the store before navigating
+  createEffect(on(
+    () => [decodedContext(), decodedNamespace()] as const,
+    ([contextFromUrl, namespaceFromUrl]) => {
+      if (contextFromUrl && contextStore.selectedContext() !== contextFromUrl) {
+        contextStore.setSelectedContext(contextFromUrl);
+      }
 
-    if (contextFromUrl && contextStore.selectedContext() !== contextFromUrl) {
-      contextStore.setSelectedContext(contextFromUrl);
-    }
+      if (namespaceFromUrl && contextStore.selectedNamespace() !== namespaceFromUrl) {
+        contextStore.setSelectedNamespace(namespaceFromUrl);
+      }
 
-    if (namespaceFromUrl && contextStore.selectedNamespace() !== namespaceFromUrl) {
-      contextStore.setSelectedNamespace(namespaceFromUrl);
+      if (contextFromUrl && contextStore.activeContext() !== contextFromUrl) {
+        void contextStore.changeContext(contextFromUrl, namespaceFromUrl);
+      }
     }
-
-    if (contextFromUrl && contextStore.activeContext() !== contextFromUrl) {
-      void contextStore.changeContext(contextFromUrl, namespaceFromUrl);
-    }
-  });
+  ));
 
   const handleContextChange = async (newContext: string) => {
     // Switch context on backend first

@@ -152,6 +152,13 @@ const AppHeader = (props: AppHeaderProps) => {
             <button
               type="button"
               class="btn btn-xs btn-outline"
+              onClick={() => handleResourceTypeChange('node-pool-summary')}
+            >
+              Pools
+            </button>
+            <button
+              type="button"
+              class="btn btn-xs btn-outline"
               onClick={() => handleResourceTypeChange('namespaces')}
             >
               Namespaces

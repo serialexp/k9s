@@ -5,6 +5,7 @@ export interface ResourceAction {
   onClick: () => void | Promise<void>;
   variant?: 'primary' | 'secondary' | 'error' | 'warning';
   icon?: string;
+  tooltip?: string;
   confirm?: {
     title: string;
     message: string;
@@ -59,24 +60,34 @@ const ResourceActions = (props: ResourceActionsProps) => {
     <>
       <div class="flex items-center gap-2">
         <For each={props.actions}>
-          {(action) => (
-            <button
-              type="button"
-              class={`btn btn-sm ${getButtonClass(action.variant)}`}
-              onClick={() => handleActionClick(action)}
-              disabled={props.disabled || actionInProgress() !== null}
-            >
-              <Show when={actionInProgress() === action.label}>
-                <span class="loading loading-spinner loading-xs" />
+          {(action) => {
+            const button = (
+              <button
+                type="button"
+                class={`btn btn-sm ${getButtonClass(action.variant)}`}
+                onClick={() => handleActionClick(action)}
+                disabled={props.disabled || actionInProgress() !== null}
+              >
+                <Show when={actionInProgress() === action.label}>
+                  <span class="loading loading-spinner loading-xs" />
+                </Show>
+                <Show when={action.icon}>
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={action.icon} />
+                  </svg>
+                </Show>
+                {action.label}
+              </button>
+            );
+
+            return (
+              <Show when={action.tooltip} fallback={button}>
+                <div class="tooltip tooltip-bottom" data-tip={action.tooltip}>
+                  {button}
+                </div>
               </Show>
-              <Show when={action.icon}>
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={action.icon} />
-                </svg>
-              </Show>
-              {action.label}
-            </button>
-          )}
+            );
+          }}
         </For>
       </div>
 

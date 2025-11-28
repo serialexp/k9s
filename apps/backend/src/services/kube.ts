@@ -112,6 +112,8 @@ type NodePodDetail = {
 	memoryBytes: number;
 	cpuRequests?: string;
 	memoryRequests?: string;
+	cpuUsage?: string;
+	memoryUsage?: string;
 	nodeSelector?: Record<string, string>;
 	nodeAffinity?: V1NodeAffinity;
 	tolerations: V1Toleration[];
@@ -204,12 +206,63 @@ export interface NodeListItem {
 	cpuRequests?: string;
 	memoryRequests?: string;
 	blockers?: NodeBlocker[];
-	largestPods: Array<{
+	pods: Array<{
 		name: string;
 		namespace: string;
 		cpuRequests?: string;
 		memoryRequests?: string;
+		cpuUsage?: string;
+		memoryUsage?: string;
 	}>;
+}
+
+export interface NodeCondition {
+	type: string;
+	status: string;
+	reason?: string;
+	message?: string;
+	lastHeartbeatTime?: string;
+	lastTransitionTime?: string;
+}
+
+export interface NodeDetail extends NodeListItem {
+	labels: Record<string, string>;
+	annotations: Record<string, string>;
+	taints: Array<{
+		key: string;
+		value?: string;
+		effect: string;
+	}>;
+	conditions: NodeCondition[];
+	nodeInfo: {
+		machineID?: string;
+		systemUUID?: string;
+		bootID?: string;
+		kernelVersion?: string;
+		osImage?: string;
+		containerRuntimeVersion?: string;
+		kubeletVersion?: string;
+		kubeProxyVersion?: string;
+		operatingSystem?: string;
+		architecture?: string;
+	};
+	addresses: Array<{
+		type: string;
+		address: string;
+	}>;
+	podCIDR?: string;
+	podCIDRs?: string[];
+	providerID?: string;
+}
+
+export interface NodeEvent {
+	type: string;
+	reason: string;
+	message: string;
+	count?: number;
+	firstTimestamp?: string;
+	lastTimestamp?: string;
+	source?: string;
 }
 
 export interface PodDetail extends PodListItem {
@@ -1194,6 +1247,7 @@ export class KubeService {
 				nodeList,
 				usageByNode,
 				podDetailsByNode,
+				podMetricsByNamespace,
 				nodeEvents,
 				networkingWarnings,
 				vpcWarnings,
@@ -1201,6 +1255,7 @@ export class KubeService {
 				this.coreApi.listNode(),
 				this.loadNodeMetrics(),
 				this.loadNodePodDetails(),
+				this.loadAllPodMetrics(),
 				this.loadNodeEvents(),
 				this.loadNetworkingWarnings(),
 				this.loadVpcCniWarnings(),
@@ -1266,7 +1321,19 @@ export class KubeService {
 				const usage = usageByNode.get(name);
 				const podDetails = podDetailsByNode.get(name) ?? [];
 				const pool = this.extractNodePool(node.metadata?.labels) ?? "default";
-				const largestPods = this.pickLargestPods(podDetails);
+				const pods = podDetails.map((pod) => {
+					const podUsage = podMetricsByNamespace
+						.get(pod.namespace)
+						?.get(pod.name);
+					return {
+						name: pod.name,
+						namespace: pod.namespace,
+						cpuRequests: pod.cpuRequests,
+						memoryRequests: pod.memoryRequests,
+						cpuUsage: podUsage?.cpu,
+						memoryUsage: podUsage?.memory,
+					};
+				});
 				const totals = this.aggregatePodResources(podDetails);
 				const cpuAllocatableMillicores = this.parseCpuQuantity(
 					node.status?.allocatable?.cpu,
@@ -1316,7 +1383,7 @@ export class KubeService {
 						podIPsCapacity: podIpCapacity,
 						cpuRequestsMillicores: totals.cpuMillicores,
 						memoryRequestsBytes: totals.memoryBytes,
-						largestPods,
+						pods,
 						blockers,
 					}),
 				);
@@ -1348,6 +1415,289 @@ export class KubeService {
 			]);
 
 			return { nodes, pools };
+		});
+	}
+
+	async getNode(name: string): Promise<NodeDetail> {
+		return this.withCredentialRetry(async () => {
+			const [node, usageByNode, podDetailsByNode, podMetricsByNamespace] =
+				await Promise.all([
+					this.coreApi.readNode({ name }),
+					this.loadNodeMetrics(),
+					this.loadNodePodDetails(),
+					this.loadAllPodMetrics(),
+				]);
+
+			const usage = usageByNode.get(name);
+			const podDetails = podDetailsByNode.get(name) ?? [];
+			const pool = this.extractNodePool(node.metadata?.labels) ?? "default";
+
+			const pods = podDetails.map((pod) => {
+				const podUsage = podMetricsByNamespace
+					.get(pod.namespace)
+					?.get(pod.name);
+				return {
+					name: pod.name,
+					namespace: pod.namespace,
+					cpuRequests: pod.cpuRequests,
+					memoryRequests: pod.memoryRequests,
+					cpuUsage: podUsage?.cpu,
+					memoryUsage: podUsage?.memory,
+				};
+			});
+
+			const totals = this.aggregatePodResources(podDetails);
+			const cpuAllocatableMillicores = this.parseCpuQuantity(
+				node.status?.allocatable?.cpu,
+			);
+			const memoryAllocatableBytes = this.parseMemoryQuantity(
+				node.status?.allocatable?.memory,
+			);
+			const podCapacity = Number.parseInt(
+				node.status?.capacity?.pods ?? "",
+				10,
+			);
+			const podAllocatable = Number.parseInt(
+				node.status?.allocatable?.pods ?? "",
+				10,
+			);
+			const allocatedIPs = new Set<string>();
+			for (const pod of podDetails) {
+				for (const ip of pod.podIPs ?? []) {
+					allocatedIPs.add(ip);
+				}
+			}
+			const podIpCapacity = this.estimateNodePodIpCapacity(node);
+
+			const baseItem = this.mapNodeListItem(node, usage, {
+				pool,
+				podCount: podDetails.length,
+				podCapacity: Number.isFinite(podCapacity) ? podCapacity : undefined,
+				podAllocatable: Number.isFinite(podAllocatable)
+					? podAllocatable
+					: undefined,
+				podIPsAllocated: allocatedIPs.size,
+				podIPsCapacity: podIpCapacity,
+				cpuRequestsMillicores: totals.cpuMillicores,
+				memoryRequestsBytes: totals.memoryBytes,
+				pods,
+				blockers: [],
+			});
+
+			const conditions: NodeCondition[] = (node.status?.conditions ?? []).map(
+				(c) => ({
+					type: c.type ?? "",
+					status: c.status ?? "",
+					reason: c.reason ?? undefined,
+					message: c.message ?? undefined,
+					lastHeartbeatTime: c.lastHeartbeatTime?.toISOString(),
+					lastTransitionTime: c.lastTransitionTime?.toISOString(),
+				}),
+			);
+
+			const nodeInfo = node.status?.nodeInfo;
+			const addresses = (node.status?.addresses ?? []).map((a) => ({
+				type: a.type ?? "",
+				address: a.address ?? "",
+			}));
+
+			const taints = (node.spec?.taints ?? []).map((t) => ({
+				key: t.key ?? "",
+				value: t.value ?? undefined,
+				effect: t.effect ?? "",
+			}));
+
+			return {
+				...baseItem,
+				labels: node.metadata?.labels ?? {},
+				annotations: node.metadata?.annotations ?? {},
+				taints,
+				conditions,
+				nodeInfo: {
+					machineID: nodeInfo?.machineID ?? undefined,
+					systemUUID: nodeInfo?.systemUUID ?? undefined,
+					bootID: nodeInfo?.bootID ?? undefined,
+					kernelVersion: nodeInfo?.kernelVersion ?? undefined,
+					osImage: nodeInfo?.osImage ?? undefined,
+					containerRuntimeVersion: nodeInfo?.containerRuntimeVersion ?? undefined,
+					kubeletVersion: nodeInfo?.kubeletVersion ?? undefined,
+					kubeProxyVersion: nodeInfo?.kubeProxyVersion ?? undefined,
+					operatingSystem: nodeInfo?.operatingSystem ?? undefined,
+					architecture: nodeInfo?.architecture ?? undefined,
+				},
+				addresses,
+				podCIDR: node.spec?.podCIDR ?? undefined,
+				podCIDRs: node.spec?.podCIDRs ?? undefined,
+				providerID: node.spec?.providerID ?? undefined,
+			};
+		});
+	}
+
+	async getNodeManifest(name: string): Promise<string> {
+		return this.withCredentialRetry(async () => {
+			const node = await this.coreApi.readNode({ name });
+			const manifest = this.sanitizeManifest(node);
+			return JSON.stringify(manifest, null, 2);
+		});
+	}
+
+	async getNodeEvents(name: string): Promise<NodeEvent[]> {
+		return this.withCredentialRetry(async () => {
+			const events = await this.coreApi.listEventForAllNamespaces({
+				fieldSelector: `involvedObject.name=${name},involvedObject.kind=Node`,
+			});
+
+			return (events.items ?? [])
+				.map((event: CoreV1Event) => ({
+					type: event.type ?? "",
+					reason: event.reason ?? "",
+					message: event.message ?? "",
+					count: event.count,
+					firstTimestamp: event.firstTimestamp?.toISOString(),
+					lastTimestamp: event.lastTimestamp?.toISOString(),
+					source: event.source?.component ?? event.reportingComponent,
+				}))
+				.sort((a, b) => {
+					const timeA = new Date(
+						a.lastTimestamp ?? a.firstTimestamp ?? "",
+					).getTime();
+					const timeB = new Date(
+						b.lastTimestamp ?? b.firstTimestamp ?? "",
+					).getTime();
+					return timeB - timeA;
+				});
+		});
+	}
+
+	async cordonNode(name: string): Promise<void> {
+		return this.withCredentialRetry(async () => {
+			const setHeaderMiddleware = (
+				key: string,
+				value: string,
+			): ObservableMiddleware => ({
+				pre: (request: RequestContext) => {
+					request.setHeaderParam(key, value);
+					return of(request);
+				},
+				post: (response: ResponseContext) => of(response),
+			});
+
+			await this.coreApi.patchNode(
+				{ name, body: { spec: { unschedulable: true } } },
+				{
+					middleware: [
+						setHeaderMiddleware(
+							"Content-Type",
+							"application/strategic-merge-patch+json",
+						),
+					],
+					middlewareMergeStrategy: "append",
+				},
+			);
+		});
+	}
+
+	async uncordonNode(name: string): Promise<void> {
+		return this.withCredentialRetry(async () => {
+			const setHeaderMiddleware = (
+				key: string,
+				value: string,
+			): ObservableMiddleware => ({
+				pre: (request: RequestContext) => {
+					request.setHeaderParam(key, value);
+					return of(request);
+				},
+				post: (response: ResponseContext) => of(response),
+			});
+
+			await this.coreApi.patchNode(
+				{ name, body: { spec: { unschedulable: false } } },
+				{
+					middleware: [
+						setHeaderMiddleware(
+							"Content-Type",
+							"application/strategic-merge-patch+json",
+						),
+					],
+					middlewareMergeStrategy: "append",
+				},
+			);
+		});
+	}
+
+	async drainNode(name: string): Promise<{ evictedPods: string[] }> {
+		return this.withCredentialRetry(async () => {
+			const setHeaderMiddleware = (
+				key: string,
+				value: string,
+			): ObservableMiddleware => ({
+				pre: (request: RequestContext) => {
+					request.setHeaderParam(key, value);
+					return of(request);
+				},
+				post: (response: ResponseContext) => of(response),
+			});
+
+			await this.coreApi.patchNode(
+				{ name, body: { spec: { unschedulable: true } } },
+				{
+					middleware: [
+						setHeaderMiddleware(
+							"Content-Type",
+							"application/strategic-merge-patch+json",
+						),
+					],
+					middlewareMergeStrategy: "append",
+				},
+			);
+
+			const podList = await this.coreApi.listPodForAllNamespaces({
+				fieldSelector: `spec.nodeName=${name}`,
+			});
+
+			const evictedPods: string[] = [];
+			const evictionErrors: string[] = [];
+
+			for (const pod of podList.items ?? []) {
+				const podName = pod.metadata?.name;
+				const namespace = pod.metadata?.namespace;
+				if (!podName || !namespace) continue;
+
+				const ownerKind = pod.metadata?.ownerReferences?.[0]?.kind;
+				if (ownerKind === "DaemonSet") continue;
+
+				if (
+					pod.metadata?.annotations?.[
+						"kubernetes.io/config.mirror"
+					]
+				) {
+					continue;
+				}
+
+				try {
+					await this.coreApi.deleteNamespacedPod({
+						name: podName,
+						namespace,
+						body: {
+							apiVersion: "policy/v1",
+							kind: "DeleteOptions",
+							gracePeriodSeconds: 30,
+						},
+					});
+					evictedPods.push(`${namespace}/${podName}`);
+				} catch (err) {
+					const error = err as { body?: { message?: string } };
+					evictionErrors.push(
+						`${namespace}/${podName}: ${error.body?.message ?? "unknown error"}`,
+					);
+				}
+			}
+
+			if (evictionErrors.length > 0) {
+				console.warn("Some pods could not be evicted:", evictionErrors);
+			}
+
+			return { evictedPods };
 		});
 	}
 
@@ -1507,6 +1857,72 @@ export class KubeService {
 			}
 
 			return usageByPod;
+		} catch (error) {
+			const err = error as { statusCode?: number };
+			if (err.statusCode === 401) {
+				throw error;
+			}
+			return new Map();
+		}
+	}
+
+	private async loadAllPodMetrics(): Promise<
+		Map<string, Map<string, ResourceUsage>>
+	> {
+		try {
+			const response = await this.customObjectsApi.listClusterCustomObject({
+				group: "metrics.k8s.io",
+				version: "v1beta1",
+				plural: "pods",
+			});
+
+			const list = response as unknown as {
+				items?: Array<{
+					metadata?: { name?: string | null; namespace?: string | null };
+					containers?: Array<{
+						usage?: { cpu?: string | null; memory?: string | null } | null;
+					} | null>;
+				}>;
+			};
+
+			const usageByNamespaceAndPod = new Map<
+				string,
+				Map<string, ResourceUsage>
+			>();
+
+			for (const item of list.items ?? []) {
+				const podName = item?.metadata?.name ?? undefined;
+				const namespace = item?.metadata?.namespace ?? "default";
+				if (!podName) continue;
+
+				let totalCpuMillicores = 0;
+				let totalMemoryBytes = 0;
+
+				for (const container of item?.containers ?? []) {
+					totalCpuMillicores += this.parseCpuQuantity(
+						container?.usage?.cpu ?? undefined,
+					);
+					totalMemoryBytes += this.parseMemoryQuantity(
+						container?.usage?.memory ?? undefined,
+					);
+				}
+
+				if (!usageByNamespaceAndPod.has(namespace)) {
+					usageByNamespaceAndPod.set(namespace, new Map());
+				}
+				usageByNamespaceAndPod.get(namespace)!.set(podName, {
+					cpu:
+						totalCpuMillicores > 0
+							? this.formatCpuQuantity(totalCpuMillicores)
+							: undefined,
+					memory:
+						totalMemoryBytes > 0
+							? this.formatMemoryQuantity(totalMemoryBytes)
+							: undefined,
+				});
+			}
+
+			return usageByNamespaceAndPod;
 		} catch (error) {
 			const err = error as { statusCode?: number };
 			if (err.statusCode === 401) {
@@ -1872,23 +2288,6 @@ export class KubeService {
 			},
 			{ cpuMillicores: 0, memoryBytes: 0 },
 		);
-	}
-
-	private pickLargestPods(pods: NodePodDetail[]): NodeListItem["largestPods"] {
-		return [...pods]
-			.sort((a, b) => {
-				if (b.memoryBytes !== a.memoryBytes) {
-					return b.memoryBytes - a.memoryBytes;
-				}
-				return b.cpuMillicores - a.cpuMillicores;
-			})
-			.slice(0, 3)
-			.map(({ name, namespace, cpuRequests, memoryRequests }) => ({
-				name,
-				namespace,
-				cpuRequests,
-				memoryRequests,
-			}));
 	}
 
 	private estimateNodePodIpCapacity(node: V1Node): number | undefined {
@@ -2622,7 +3021,7 @@ export class KubeService {
 			podIPsCapacity?: number;
 			cpuRequestsMillicores?: number;
 			memoryRequestsBytes?: number;
-			largestPods?: NodeListItem["largestPods"];
+			pods?: NodeListItem["pods"];
 			blockers?: NodeBlocker[];
 		},
 	): NodeListItem {
@@ -2716,7 +3115,7 @@ export class KubeService {
 			podIPsCapacity: options?.podIPsCapacity,
 			cpuRequests,
 			memoryRequests,
-			largestPods: options?.largestPods ?? [],
+			pods: options?.pods ?? [],
 			blockers: options?.blockers ?? [],
 		};
 	}
