@@ -2,10 +2,19 @@ import { batch, createEffect, createMemo, createSignal, For, onCleanup, Show } f
 import { streamPodLogs } from '../lib/api';
 import { parseAnsi } from '../utils/ansi';
 
+interface ContainerStatus {
+  name: string;
+  ready: boolean;
+  restartCount: number;
+  image: string;
+  state?: Record<string, unknown>;
+}
+
 interface LogViewerProps {
   namespace?: string;
   pod?: string;
   containers: string[];
+  containersStatus?: ContainerStatus[];
   active?: boolean;
 }
 
@@ -342,8 +351,17 @@ const LogViewer = (props: LogViewerProps) => {
   const [entries, setEntries] = createSignal<LogEntry[]>([]);
   const [viewMode, setViewMode] = createSignal<'structured' | 'messages' | 'raw'>('structured');
   const [selectedContainer, setSelectedContainer] = createSignal<string>('');
+  const [showPrevious, setShowPrevious] = createSignal(false);
   const [isStreaming, setIsStreaming] = createSignal(false);
   const [autoScroll, setAutoScroll] = createSignal(true);
+
+  const selectedContainerStatus = createMemo(() => {
+    const container = selectedContainer();
+    if (!container || !props.containersStatus) return undefined;
+    return props.containersStatus.find((cs) => cs.name === container);
+  });
+
+  const hasRestarts = createMemo(() => (selectedContainerStatus()?.restartCount ?? 0) > 0);
 
   let scrollContainerRef: HTMLDivElement | undefined;
   let lastUserScrollTime = 0;
@@ -390,8 +408,17 @@ const LogViewer = (props: LogViewerProps) => {
     const containers = props.containers;
     if (containers.length && !selectedContainer()) {
       setSelectedContainer(containers[0]);
+      setShowPrevious(false);
     } else if (selectedContainer() && !containers.includes(selectedContainer())) {
       setSelectedContainer(containers[0] ?? '');
+      setShowPrevious(false);
+    }
+  });
+
+  // Reset showPrevious when container changes to one without restarts
+  createEffect(() => {
+    if (!hasRestarts() && showPrevious()) {
+      setShowPrevious(false);
     }
   });
 
@@ -399,6 +426,7 @@ const LogViewer = (props: LogViewerProps) => {
     const namespace = props.namespace;
     const pod = props.pod;
     const container = selectedContainer();
+    const previous = showPrevious();
     const isActive = props.active ?? true;
 
     if (!isActive || !namespace || !pod || !container) {
@@ -415,6 +443,8 @@ const LogViewer = (props: LogViewerProps) => {
       namespace,
       pod,
       container,
+      previous,
+      follow: !previous,
       onChunk: (chunk) => {
         buffer += chunk;
         const lines = buffer.split('\n');
@@ -545,6 +575,26 @@ const LogViewer = (props: LogViewerProps) => {
             >
               <For each={props.containers}>{(container) => <option value={container}>{container}</option>}</For>
             </select>
+          </Show>
+          <Show when={hasRestarts()}>
+            <div class="join join-horizontal">
+              <button
+                type="button"
+                class={`btn btn-xs join-item ${!showPrevious() ? 'btn-active' : ''}`}
+                onClick={() => setShowPrevious(false)}
+                title="Current container logs"
+              >
+                Live
+              </button>
+              <button
+                type="button"
+                class={`btn btn-xs join-item ${showPrevious() ? 'btn-active' : ''}`}
+                onClick={() => setShowPrevious(true)}
+                title={`Logs from previous container instance (${selectedContainerStatus()?.restartCount} restart${(selectedContainerStatus()?.restartCount ?? 0) > 1 ? 's' : ''})`}
+              >
+                Prev
+              </button>
+            </div>
           </Show>
           <div class="join join-horizontal">
             <button

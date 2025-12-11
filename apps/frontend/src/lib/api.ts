@@ -2934,6 +2934,7 @@ export interface LogStreamOptions {
   container: string;
   follow?: boolean;
   tailLines?: number;
+  previous?: boolean;
   onChunk: (chunk: string) => void;
   onComplete?: () => void;
   onError?: (error: Error) => void;
@@ -2956,11 +2957,11 @@ export interface EksCluster {
 }
 
 export function streamPodLogs(options: LogStreamOptions): () => void {
-  const { namespace, pod, container, follow = true, tailLines = 200, onChunk, onComplete, onError } = options;
+  const { namespace, pod, container, follow = true, tailLines = 200, previous = false, onChunk, onComplete, onError } = options;
   const controller = new AbortController();
 
   void fetch(
-    `${API_BASE}/namespaces/${encodeURIComponent(namespace)}/pods/${encodeURIComponent(pod)}/containers/${encodeURIComponent(container)}/logs?follow=${follow}&tailLines=${tailLines}`,
+    `${API_BASE}/namespaces/${encodeURIComponent(namespace)}/pods/${encodeURIComponent(pod)}/containers/${encodeURIComponent(container)}/logs?follow=${follow}&tailLines=${tailLines}&previous=${previous}`,
     {
       signal: controller.signal
     }

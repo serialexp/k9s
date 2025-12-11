@@ -400,6 +400,7 @@ const ResourceListPage = () => {
                     namespace={namespace()}
                     pod={resourceName()}
                     containers={selectedPod()?.containers ?? []}
+                    containersStatus={podDetail()?.containersStatus}
                     active={tab() === 'logs'}
                   />
                 </Match>

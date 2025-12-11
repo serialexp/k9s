@@ -2887,6 +2887,7 @@ export class KubeService {
 		container: string;
 		follow?: boolean;
 		tailLines?: number;
+		previous?: boolean;
 		signal?: AbortSignal;
 		onChunk: (chunk: string) => void;
 		onError: (err: unknown) => void;
@@ -2897,6 +2898,7 @@ export class KubeService {
 			container,
 			follow = true,
 			tailLines = 200,
+			previous = false,
 			signal,
 			onChunk,
 			onError,
@@ -2929,6 +2931,7 @@ export class KubeService {
 			.log(namespace, pod, container, passThrough, {
 				follow,
 				tailLines,
+				previous,
 				timestamps: true,
 			})
 			.then((controller) => {

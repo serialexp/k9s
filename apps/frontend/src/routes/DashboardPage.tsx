@@ -243,6 +243,7 @@ const DashboardPage = () => {
                     namespace={selectedPod()?.namespace}
                     pod={selectedPod()?.name}
                     containers={selectedPod()?.containers ?? []}
+                    containersStatus={podDetail()?.containersStatus}
                     active={uiStore.selectedPodTab() === 'logs'}
                   />
                 </Match>
