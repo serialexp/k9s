@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import apiPlugin from './routes/api.js';
 import eventsPlugin from './routes/events.js';
 import logsPlugin from './routes/logs.js';
+import portForwardPlugin from './routes/portforward.js';
 import { KubeService } from './services/kube.js';
 import { AwsService } from './services/aws.js';
 
@@ -27,8 +28,10 @@ const start = async () => {
   await server.register(apiPlugin, { prefix: '/api', kube, aws });
   await server.register(eventsPlugin, { prefix: '/events', kube });
   await server.register(logsPlugin, { prefix: '/api', kube });
+  await server.register(portForwardPlugin, { prefix: '/api', kube });
 
   const close = async () => {
+    kube.stopAllPortForwards();
     await server.close();
     process.exit(0);
   };

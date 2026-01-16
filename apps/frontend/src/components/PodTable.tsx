@@ -2,6 +2,7 @@ import { createSignal, For, Show } from 'solid-js';
 import type { PodListItem } from '../lib/api';
 import { formatRelativeTime } from '../utils/datetime';
 import { formatResourceLine } from '../utils/resources';
+import { portForwardStore } from '../stores/portForwardStore';
 
 const generateMarkdownTable = (pods: PodListItem[]): string => {
   const headers = ['Name', 'Namespace', 'Status', 'Usage', 'Requests', 'Age'];
@@ -113,7 +114,18 @@ const PodTable = (props: PodTableProps) => {
                   class={`cursor-pointer hover:bg-base-200/50 ${props.selectedPod === pod.name ? 'bg-primary/20 border-l-4 border-primary' : ''}`}
                   onClick={() => props.onSelect?.(pod)}
                 >
-                  <td class="font-mono text-sm">{pod.name}</td>
+                  <td class="font-mono text-sm">
+                    <div class="flex items-center gap-1">
+                      {pod.name}
+                      <Show when={portForwardStore.hasForwardForPod(pod.namespace, pod.name)}>
+                        <span class="badge badge-xs badge-primary" title="Port forward active">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                        </span>
+                      </Show>
+                    </div>
+                  </td>
                   <td class="text-xs opacity-80">{pod.namespace}</td>
                   <td class="flex items-center gap-1">
                     <span class={`badge badge-sm ${phaseBadgeClass(pod.phase)}`}>{pod.phase ?? 'Unknown'}</span>

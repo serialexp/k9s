@@ -4,7 +4,9 @@ import PodInfoPanel from '../components/PodInfoPanel';
 import PodEventsPanel from '../components/PodEventsPanel';
 import PodStatusPanel from '../components/PodStatusPanel';
 import LogViewer from '../components/LogViewer';
+import PortForwardDialog from '../components/PortForwardDialog';
 import { contextStore } from '../stores/contextStore';
+import { portForwardStore } from '../stores/portForwardStore';
 import { uiStore } from '../stores/uiStore';
 import {
   fetchPod,
@@ -12,6 +14,7 @@ import {
   fetchPodManifest,
   fetchPods,
   fetchPodStatus,
+  startPortForward,
   subscribeToPodEvents,
   type PodDetail,
   type PodEvent,
@@ -62,6 +65,8 @@ const DashboardPage = () => {
   const [podStatus, setPodStatus] = createSignal<PodStatus | undefined>();
   const [podStatusLoading, setPodStatusLoading] = createSignal(false);
 
+  const [portForwardDialogOpen, setPortForwardDialogOpen] = createSignal(false);
+
   let unsubscribePodStream: (() => void) | undefined;
 
   const loadPods = async (namespace: string) => {
@@ -109,6 +114,13 @@ const DashboardPage = () => {
       setPodEventsLoading(false);
       setPodStatusLoading(false);
     }
+  };
+
+  const handleStartPortForward = async (localPort: number, targetPort: number) => {
+    const pod = selectedPod();
+    if (!pod) throw new Error('No pod selected');
+    await startPortForward(pod.namespace, pod.name, localPort, targetPort);
+    await portForwardStore.loadForwards();
   };
 
   createEffect(() => {
@@ -174,7 +186,7 @@ const DashboardPage = () => {
 
         <div class="card bg-base-200/30 shadow-lg flex flex-col overflow-hidden">
           <div class="card-body gap-0 p-0 flex-1 overflow-hidden flex flex-col">
-            <div class="tabs tabs-boxed px-4 pt-4 flex-shrink-0">
+            <div class="tabs tabs-boxed px-4 pt-4 flex-shrink-0 w-full flex items-center">
               <button
                 type="button"
                 class={`tab ${uiStore.selectedPodTab() === 'info' ? 'tab-active' : ''}`}
@@ -210,6 +222,16 @@ const DashboardPage = () => {
               >
                 Logs
               </button>
+              <div class="flex-1" />
+              <Show when={selectedPod()}>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  onClick={() => setPortForwardDialogOpen(true)}
+                >
+                  Port Forward
+                </button>
+              </Show>
             </div>
             <div class="divider my-0 flex-shrink-0" />
             <div class="p-6 flex-1 overflow-y-auto">
@@ -252,6 +274,19 @@ const DashboardPage = () => {
           </div>
         </div>
       </section>
+
+      <Show when={selectedPod()}>
+        {(pod) => (
+          <PortForwardDialog
+            open={portForwardDialogOpen()}
+            namespace={pod().namespace}
+            pod={pod().name}
+            containerPorts={podDetail()?.containerPorts}
+            onClose={() => setPortForwardDialogOpen(false)}
+            onStart={handleStartPortForward}
+          />
+        )}
+      </Show>
     </div>
   );
 };

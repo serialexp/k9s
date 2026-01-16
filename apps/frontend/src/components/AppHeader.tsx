@@ -1,6 +1,8 @@
-import { For, Show } from 'solid-js';
+import { For, Show, onMount, onCleanup } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { contextStore } from '../stores/contextStore';
+import { portForwardStore } from '../stores/portForwardStore';
+import PortForwardModal from './PortForwardModal';
 
 interface AppHeaderProps {
   currentContext?: string;
@@ -13,6 +15,14 @@ interface AppHeaderProps {
 
 const AppHeader = (props: AppHeaderProps) => {
   const navigate = useNavigate();
+
+  onMount(() => {
+    portForwardStore.startPolling();
+  });
+
+  onCleanup(() => {
+    portForwardStore.stopPolling();
+  });
 
   const handleContextChange = (newContext: string) => {
     props.onContextChange(newContext);
@@ -170,6 +180,16 @@ const AppHeader = (props: AppHeaderProps) => {
             >
               Apps
             </button>
+            <button
+              type="button"
+              class={`btn btn-xs ${portForwardStore.count() > 0 ? 'btn-primary' : 'btn-outline'}`}
+              onClick={() => portForwardStore.openModal()}
+            >
+              Port Forwards
+              <Show when={portForwardStore.count() > 0}>
+                <span class="badge badge-xs">{portForwardStore.count()}</span>
+              </Show>
+            </button>
           </div>
         </div>
         <div class="flex items-center">
@@ -189,6 +209,7 @@ const AppHeader = (props: AppHeaderProps) => {
           </div>
         </div>
       </div>
+      <PortForwardModal />
     </header>
   );
 };

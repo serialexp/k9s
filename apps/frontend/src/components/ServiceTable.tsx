@@ -63,7 +63,12 @@ const ServiceTable = (props: ServiceTableProps) => (
                   class={`cursor-pointer hover:bg-base-200/50 ${props.selectedService === service.name ? 'bg-primary/20 border-l-4 border-primary' : ''}`}
                   onClick={() => props.onSelect?.(service)}
                 >
-                  <td class="font-mono text-sm">{service.name}</td>
+                  <td class="font-mono text-sm">
+                    <span class="inline-flex items-center gap-2">
+                      <span class={`inline-block w-2 h-2 rounded-full ${service.ready === null ? 'bg-base-content/30' : service.ready ? 'bg-success' : 'bg-error'}`} />
+                      {service.name}
+                    </span>
+                  </td>
                   <td>
                     <span class={`badge badge-sm ${typeBadgeClass(service.type)}`}>{service.type}</span>
                   </td>

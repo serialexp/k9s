@@ -5,7 +5,9 @@ import PodInfoPanel from '../components/PodInfoPanel';
 import PodEventsPanel from '../components/PodEventsPanel';
 import PodStatusPanel from '../components/PodStatusPanel';
 import LogViewer from '../components/LogViewer';
+import PortForwardDialog from '../components/PortForwardDialog';
 import ResourceActions, { type ResourceAction } from '../components/ResourceActions';
+import { portForwardStore } from '../stores/portForwardStore';
 import { contextStore } from '../stores/contextStore';
 import {
   ApiError,
@@ -16,6 +18,7 @@ import {
   fetchPodManifest,
   fetchPods,
   fetchPodStatus,
+  startPortForward,
   subscribeToPodEvents,
   type PodDetail,
   type PodEvent,
@@ -75,6 +78,8 @@ const ResourceListPage = () => {
   const [podStatusLoading, setPodStatusLoading] = createSignal(false);
 
   const [contextError, setContextError] = createSignal<string>('');
+
+  const [portForwardDialogOpen, setPortForwardDialogOpen] = createSignal(false);
 
   let unsubscribePodStream: (() => void) | undefined;
 
@@ -248,6 +253,14 @@ const ResourceListPage = () => {
     navigate(`/${encodeURIComponent(context())}/${encodeURIComponent(ns)}/pods`);
   };
 
+  const handleStartPortForward = async (localPort: number, targetPort: number) => {
+    const rn = resourceName();
+    const ns = namespace();
+    if (!rn || !ns) throw new Error('No pod selected');
+    await startPortForward(ns, rn, localPort, targetPort);
+    await portForwardStore.loadForwards();
+  };
+
   const podActions = (): ResourceAction[] => {
     if (!resourceName()) return [];
 
@@ -366,7 +379,18 @@ const ResourceListPage = () => {
                 Logs
               </button>
               </div>
-              <ResourceActions actions={podActions()} />
+              <div class="flex items-center gap-2">
+                <Show when={resourceName()}>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                    onClick={() => setPortForwardDialogOpen(true)}
+                  >
+                    Port Forward
+                  </button>
+                </Show>
+                <ResourceActions actions={podActions()} />
+              </div>
             </div>
             <div class="divider my-0 flex-shrink-0" />
             <div class="p-6 flex-1 overflow-y-auto">
@@ -410,6 +434,17 @@ const ResourceListPage = () => {
         </div>
       </section>
       </div>
+
+      <Show when={resourceName()}>
+        <PortForwardDialog
+          open={portForwardDialogOpen()}
+          namespace={namespace()}
+          pod={resourceName()!}
+          containerPorts={podDetail()?.containerPorts}
+          onClose={() => setPortForwardDialogOpen(false)}
+          onStart={handleStartPortForward}
+        />
+      </Show>
     </main>
   );
 };

@@ -166,6 +166,13 @@ export interface PodDetail extends PodListItem {
     restartCount: number;
     image: string;
     state?: Record<string, unknown>;
+    lastState?: Record<string, unknown>;
+  }>;
+  containerPorts: Array<{
+    containerName: string;
+    name?: string;
+    containerPort: number;
+    protocol?: string;
   }>;
 }
 
@@ -632,6 +639,7 @@ export interface ServiceListItem {
     targetPort: string | number;
     protocol: string;
   }>;
+  ready: boolean | null;
   creationTimestamp?: string;
 }
 
@@ -1142,6 +1150,16 @@ export interface ScaledObjectWatchEvent {
   object: ScaledObjectListItem;
 }
 
+export interface PortForward {
+  id: string;
+  namespace: string;
+  pod: string;
+  localPort: number;
+  targetPort: number;
+  startedAt: string;
+  connectionCount: number;
+}
+
 const API_BASE = '/api';
 const EVENTS_BASE = '/events';
 
@@ -1209,6 +1227,13 @@ export async function selectContext(name: string): Promise<void> {
 
 export async function fetchNamespaces(): Promise<NamespaceList> {
   return apiFetch<NamespaceList>(`/namespaces`);
+}
+
+export async function createNamespace(name: string): Promise<void> {
+  await apiFetch<{ name: string }>(`/namespaces`, {
+    method: 'POST',
+    body: JSON.stringify({ name })
+  });
 }
 
 export function subscribeToNamespaceEvents(
@@ -3087,4 +3112,27 @@ export function subscribeToScaledObjectEvents(
   return () => {
     eventSource.close();
   };
+}
+
+export async function fetchPortForwards(): Promise<PortForward[]> {
+  const data = await apiFetch<{ items: PortForward[] }>('/port-forwards');
+  return data.items;
+}
+
+export async function startPortForward(
+  namespace: string,
+  pod: string,
+  localPort: number,
+  targetPort: number
+): Promise<PortForward> {
+  return apiFetch<PortForward>('/port-forwards', {
+    method: 'POST',
+    body: JSON.stringify({ namespace, pod, localPort, targetPort })
+  });
+}
+
+export async function stopPortForward(id: string): Promise<void> {
+  await fetch(`${API_BASE}/port-forwards/${encodeURIComponent(id)}`, {
+    method: 'DELETE'
+  });
 }

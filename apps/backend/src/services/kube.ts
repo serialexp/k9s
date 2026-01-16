@@ -5,6 +5,7 @@ import { StorageClassService } from "./resources/StorageClassService.js";
 import { ConfigMapService } from "./resources/ConfigMapService.js";
 import { SecretService } from "./resources/SecretService.js";
 import { HpaService } from "./resources/HpaService.js";
+import { PortForwardService } from "./resources/PortForwardService.js";
 import { CRDNotInstalledError } from "./base/errors.js";
 import {
 	AppsV1Api,
@@ -25,6 +26,7 @@ import {
 	V1CronJob,
 	V1Deployment,
 	V1DaemonSet,
+	V1Endpoints,
 	V1Job,
 	V1Ingress,
 	V1Namespace,
@@ -73,6 +75,10 @@ export type {
 	HpaListItem,
 	HpaWatchEvent,
 } from "./resources/HpaService.types.js";
+export type {
+	ActivePortForward,
+	PortForwardRequest,
+} from "./resources/PortForwardService.types.js";
 export { CRDNotInstalledError } from "./base/errors.js";
 
 const of = <T>(value: T) =>
@@ -274,6 +280,13 @@ export interface PodDetail extends PodListItem {
 		restartCount: number;
 		image: string;
 		state?: V1ContainerStatus["state"];
+		lastState?: V1ContainerStatus["lastState"];
+	}>;
+	containerPorts: Array<{
+		containerName: string;
+		name?: string;
+		containerPort: number;
+		protocol?: string;
 	}>;
 }
 
@@ -735,6 +748,7 @@ export interface ServiceListItem {
 		targetPort: string | number;
 		protocol: string;
 	}>;
+	ready: boolean | null;
 	creationTimestamp?: string;
 }
 
@@ -1049,6 +1063,7 @@ export class KubeService {
 	private configMapService: ConfigMapService;
 	private secretService: SecretService;
 	private hpaService: HpaService;
+	private portForwardService: PortForwardService;
 
 	constructor() {
 		this.kubeConfig = new KubeConfig();
@@ -1069,6 +1084,7 @@ export class KubeService {
 		this.configMapService = new ConfigMapService(this.kubeConfig);
 		this.secretService = new SecretService(this.kubeConfig);
 		this.hpaService = new HpaService(this.kubeConfig);
+		this.portForwardService = new PortForwardService(this.kubeConfig);
 	}
 
 	refreshCredentials() {
@@ -1090,6 +1106,7 @@ export class KubeService {
 		this.configMapService.refreshCredentials();
 		this.secretService.refreshCredentials();
 		this.hpaService.refreshCredentials();
+		this.portForwardService.refreshCredentials();
 	}
 
 	private async withCredentialRetry<T>(fn: () => Promise<T>): Promise<T> {
@@ -1141,6 +1158,8 @@ export class KubeService {
 		this.configMapService.refreshCredentials();
 		this.secretService.refreshCredentials();
 		this.hpaService.refreshCredentials();
+		this.portForwardService.stopAllForwards();
+		this.portForwardService.refreshCredentials();
 	}
 
 	async listNamespaces() {
@@ -1149,6 +1168,18 @@ export class KubeService {
 			return (list.items ?? [])
 				.map((ns: V1Namespace) => ns.metadata?.name)
 				.filter((name): name is string => Boolean(name));
+		});
+	}
+
+	async createNamespace(name: string) {
+		return this.withCredentialRetry(async () => {
+			await this.coreApi.createNamespace({
+				body: {
+					apiVersion: "v1",
+					kind: "Namespace",
+					metadata: { name },
+				},
+			});
 		});
 	}
 
@@ -1703,7 +1734,11 @@ export class KubeService {
 
 	async listNamespaceSummaries(): Promise<NamespaceSummary[]> {
 		return this.withCredentialRetry(async () => {
-			const podList = await this.coreApi.listPodForAllNamespaces();
+			const [namespaceList, podList] = await Promise.all([
+				this.coreApi.listNamespace(),
+				this.coreApi.listPodForAllNamespaces(),
+			]);
+			const namespaces = namespaceList.items ?? [];
 			const pods = podList.items ?? [];
 
 			const namespaceMetrics = new Map<
@@ -1716,6 +1751,19 @@ export class KubeService {
 					memoryUsage: number;
 				}
 			>();
+
+			for (const ns of namespaces) {
+				const name = ns.metadata?.name;
+				if (name) {
+					namespaceMetrics.set(name, {
+						podCount: 0,
+						cpuRequests: 0,
+						memoryRequests: 0,
+						cpuUsage: 0,
+						memoryUsage: 0,
+					});
+				}
+			}
 
 			for (const pod of pods) {
 				const namespace = pod.metadata?.namespace ?? "default";
@@ -2996,6 +3044,21 @@ export class KubeService {
 
 	private mapPodDetail(pod: V1Pod, usage?: ResourceUsage): PodDetail {
 		const listItem = this.mapPodListItem(pod, usage);
+
+		const containerPorts: PodDetail["containerPorts"] = [];
+		for (const container of pod.spec?.containers ?? []) {
+			for (const port of container.ports ?? []) {
+				if (port.containerPort) {
+					containerPorts.push({
+						containerName: container.name ?? "unknown",
+						name: port.name,
+						containerPort: port.containerPort,
+						protocol: port.protocol,
+					});
+				}
+			}
+		}
+
 		return {
 			...listItem,
 			labels: pod.metadata?.labels ?? {},
@@ -3007,8 +3070,10 @@ export class KubeService {
 					restartCount: cs.restartCount ?? 0,
 					image: cs.image ?? "",
 					state: cs.state ?? undefined,
+					lastState: cs.lastState ?? undefined,
 				}),
 			),
+			containerPorts,
 		};
 	}
 
@@ -3669,16 +3734,42 @@ export class KubeService {
 			throw new Error("Target revision not found or invalid");
 		}
 
+		function setHeaderMiddleware(
+			key: string,
+			value: string,
+		): ObservableMiddleware {
+			return {
+				pre: (request: RequestContext) => {
+					request.setHeaderParam(key, value);
+					return of(request);
+				},
+				post: (response: ResponseContext) => {
+					return of(response);
+				},
+			};
+		}
+
 		// Patch the deployment with the target ReplicaSet's pod template
-		await this.appsApi.patchNamespacedDeployment({
-			name: deploymentName,
-			namespace,
-			body: {
-				spec: {
-					template: targetRS.spec.template,
+		await this.appsApi.patchNamespacedDeployment(
+			{
+				name: deploymentName,
+				namespace,
+				body: {
+					spec: {
+						template: targetRS.spec.template,
+					},
 				},
 			},
-		});
+			{
+				middleware: [
+					setHeaderMiddleware(
+						"Content-Type",
+						"application/strategic-merge-patch+json",
+					),
+				],
+				middlewareMergeStrategy: "append",
+			},
+		);
 	}
 
 	async getDeploymentHistory(
@@ -5391,11 +5482,29 @@ export class KubeService {
 	// Service methods
 	async listServices(namespace: string): Promise<ServiceListItem[]> {
 		return this.withCredentialRetry(async () => {
-			const serviceList = await this.coreApi.listNamespacedService({
-				namespace,
-			});
+			const [serviceList, endpointsResult] = await Promise.all([
+				this.coreApi.listNamespacedService({ namespace }),
+				this.coreApi
+					.listNamespacedEndpoints({ namespace })
+					.catch(() => null),
+			]);
+
+			let readyEndpointsByService: Map<string, boolean> | undefined;
+			if (endpointsResult) {
+				readyEndpointsByService = new Map<string, boolean>();
+				for (const endpoints of endpointsResult.items ?? []) {
+					const serviceName = endpoints.metadata?.name;
+					if (!serviceName) continue;
+
+					const hasReadyEndpoints = (endpoints.subsets ?? []).some(
+						(subset) => (subset.addresses?.length ?? 0) > 0,
+					);
+					readyEndpointsByService.set(serviceName, hasReadyEndpoints);
+				}
+			}
+
 			return (serviceList.items ?? []).map((service: V1Service) =>
-				this.mapServiceListItem(service),
+				this.mapServiceListItem(service, readyEndpointsByService),
 			);
 		});
 	}
@@ -5451,9 +5560,29 @@ export class KubeService {
 			});
 		}
 
-		let requestController: AbortController;
+		const serviceCache = new Map<string, V1Service>();
+		const endpointReadyCache = new Map<string, boolean>();
 
-		const startWatch = async (
+		const emitServiceEvent = (type: string, service: V1Service) => {
+			const serviceName = service.metadata?.name;
+			if (!serviceName) return;
+
+			try {
+				onData(
+					JSON.stringify({
+						type,
+						object: this.mapServiceListItem(service, endpointReadyCache),
+					}),
+				);
+			} catch (err) {
+				onError(err);
+			}
+		};
+
+		let serviceController: AbortController | undefined;
+		let endpointController: AbortController | undefined;
+
+		const startServiceWatch = async (
 			retryOnAuth: boolean = true,
 		): Promise<AbortController> => {
 			try {
@@ -5461,15 +5590,57 @@ export class KubeService {
 					`/api/v1/namespaces/${namespace}/services`,
 					{},
 					(type, obj) => {
-						try {
-							onData(
-								JSON.stringify({
-									type,
-									object: this.mapServiceListItem(obj as V1Service),
-								}),
-							);
-						} catch (err) {
+						const service = obj as V1Service;
+						const serviceName = service.metadata?.name;
+						if (!serviceName) return;
+
+						if (type === "DELETED") {
+							serviceCache.delete(serviceName);
+						} else {
+							serviceCache.set(serviceName, service);
+						}
+						emitServiceEvent(type, service);
+					},
+					(err) => {
+						if (err && abortController.signal.aborted === false) {
 							onError(err);
+						}
+					},
+				);
+			} catch (error) {
+				const err = error as { statusCode?: number };
+				if (err.statusCode === 401 && retryOnAuth) {
+					this.refreshCredentials();
+					return await startServiceWatch(false);
+				}
+				throw error;
+			}
+		};
+
+		const startEndpointWatch = async (
+			retryOnAuth: boolean = true,
+		): Promise<AbortController> => {
+			try {
+				return await this.watch.watch(
+					`/api/v1/namespaces/${namespace}/endpoints`,
+					{},
+					(type, obj) => {
+						const endpoints = obj as V1Endpoints;
+						const serviceName = endpoints.metadata?.name;
+						if (!serviceName) return;
+
+						if (type === "DELETED") {
+							endpointReadyCache.delete(serviceName);
+						} else {
+							const hasReadyEndpoints = (endpoints.subsets ?? []).some(
+								(subset) => (subset.addresses?.length ?? 0) > 0,
+							);
+							endpointReadyCache.set(serviceName, hasReadyEndpoints);
+						}
+
+						const cachedService = serviceCache.get(serviceName);
+						if (cachedService) {
+							emitServiceEvent("MODIFIED", cachedService);
 						}
 					},
 					(err) => {
@@ -5482,22 +5653,29 @@ export class KubeService {
 				const err = error as { statusCode?: number };
 				if (err.statusCode === 401 && retryOnAuth) {
 					this.refreshCredentials();
-					return await startWatch(false);
+					return await startEndpointWatch(false);
 				}
 				throw error;
 			}
 		};
 
 		try {
-			requestController = await startWatch();
+			serviceController = await startServiceWatch();
 		} catch (error) {
 			onError(error);
 			abortController.abort();
 			throw error;
 		}
 
+		try {
+			endpointController = await startEndpointWatch();
+		} catch {
+			// Endpoint watching failed, but we can continue with services only
+		}
+
 		abortController.signal.addEventListener("abort", () => {
-			requestController.abort();
+			serviceController?.abort();
+			endpointController?.abort();
 		});
 
 		return () => {
@@ -5505,7 +5683,10 @@ export class KubeService {
 		};
 	}
 
-	private mapServiceListItem(service: V1Service): ServiceListItem {
+	private mapServiceListItem(
+		service: V1Service,
+		readyEndpointsByService?: Map<string, boolean>,
+	): ServiceListItem {
 		const creationTimestamp = service.metadata?.creationTimestamp
 			? new Date(service.metadata.creationTimestamp).toISOString()
 			: undefined;
@@ -5515,8 +5696,11 @@ export class KubeService {
 			.filter((ip): ip is string => Boolean(ip))
 			.join(", ");
 
+		const serviceName = service.metadata?.name ?? "unknown";
+		const ready = readyEndpointsByService?.get(serviceName) ?? null;
+
 		return {
-			name: service.metadata?.name ?? "unknown",
+			name: serviceName,
 			namespace: service.metadata?.namespace ?? "default",
 			type: service.spec?.type ?? "ClusterIP",
 			clusterIP: service.spec?.clusterIP,
@@ -5527,6 +5711,7 @@ export class KubeService {
 				targetPort: port.targetPort ?? port.port ?? 0,
 				protocol: port.protocol ?? "TCP",
 			})),
+			ready,
 			creationTimestamp,
 		};
 	}
@@ -6061,6 +6246,33 @@ export class KubeService {
 		signal?: AbortSignal,
 	) {
 		return this.hpaService.streamHpas(namespace, onData, onError, signal);
+	}
+
+	// Port forward methods
+	async startPortForward(
+		namespace: string,
+		pod: string,
+		localPort: number,
+		targetPort: number,
+	) {
+		return this.portForwardService.startPortForward({
+			namespace,
+			pod,
+			localPort,
+			targetPort,
+		});
+	}
+
+	stopPortForward(id: string) {
+		return this.portForwardService.stopPortForward(id);
+	}
+
+	listPortForwards() {
+		return this.portForwardService.listActiveForwards();
+	}
+
+	stopAllPortForwards() {
+		return this.portForwardService.stopAllForwards();
 	}
 
 	// ExternalSecret methods

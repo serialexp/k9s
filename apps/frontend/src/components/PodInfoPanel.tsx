@@ -7,6 +7,33 @@ interface PodInfoPanelProps {
   loading?: boolean;
 }
 
+const getExitCodeExplanation = (exitCode: number): string | null => {
+  if (exitCode === 0) return 'Success';
+  if (exitCode === 1) return 'General error';
+  if (exitCode === 126) return 'Command cannot execute';
+  if (exitCode === 127) return 'Command not found';
+  if (exitCode === 137) return 'Process killed by SIGKILL (usually OOM or system termination)';
+
+  if (exitCode > 128 && exitCode <= 255) {
+    const signal = exitCode - 128;
+    const signalNames: Record<number, string> = {
+      1: 'SIGHUP (hangup)',
+      2: 'SIGINT (interrupt, Ctrl+C)',
+      3: 'SIGquit (quit)',
+      6: 'SIGABRT (abort)',
+      9: 'SIGKILL (killed, cannot be caught)',
+      11: 'SIGSEGV (segmentation fault)',
+      13: 'SIGPIPE (broken pipe)',
+      15: 'SIGTERM (termination request)',
+    };
+
+    const signalName = signalNames[signal] || `signal ${signal}`;
+    return `Process terminated by ${signalName}`;
+  }
+
+  return null;
+};
+
 const PodInfoPanel = (props: PodInfoPanelProps) => (
   <Show
     when={props.pod}
@@ -20,9 +47,57 @@ const PodInfoPanel = (props: PodInfoPanelProps) => (
       )
     }
   >
-    {(pod) => (
-      <div class="flex flex-col gap-6">
-        <div class="grid gap-3 lg:grid-cols-2">
+    {(pod) => {
+      const terminatedContainers = pod().containersStatus.filter(
+        (c) => c.lastState?.terminated
+      );
+
+      return (
+        <div class="flex flex-col gap-6">
+          <Show when={terminatedContainers.length > 0}>
+            <div class="alert alert-error shadow-lg">
+              <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div class="flex flex-col gap-2 w-full">
+                <span class="font-semibold">Container{terminatedContainers.length > 1 ? 's' : ''} terminated</span>
+                <For each={terminatedContainers}>
+                  {(container) => {
+                    const terminated = container.lastState?.terminated as Record<string, unknown> | undefined;
+                    const reason = terminated?.reason as string | undefined;
+                    const exitCode = terminated?.exitCode as number | undefined;
+                    const finishedAt = terminated?.finishedAt as string | undefined;
+
+                    const explanation = exitCode !== undefined ? getExitCodeExplanation(exitCode) : null;
+
+                    return (
+                      <div class="text-sm opacity-90 flex flex-col gap-1">
+                        <div>
+                          <span class="font-mono font-semibold">{container.name}</span>
+                          {' '}
+                          <span class="badge badge-sm badge-outline">{reason ?? 'Unknown'}</span>
+                          {exitCode !== undefined && (
+                            <span class="ml-2">Exit code: {exitCode}</span>
+                          )}
+                          {finishedAt && (
+                            <span class="ml-2 opacity-70">
+                              ({formatRelativeTime(finishedAt)})
+                            </span>
+                          )}
+                        </div>
+                        {explanation && (
+                          <div class="text-xs opacity-75 ml-1">
+                            {explanation}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }}
+                </For>
+              </div>
+            </div>
+          </Show>
+          <div class="grid gap-3 lg:grid-cols-2">
           <div class="card bg-base-200/60">
             <div class="card-body gap-3 text-sm">
               <h3 class="text-xs uppercase tracking-wide opacity-80">Metadata</h3>
@@ -130,7 +205,8 @@ const PodInfoPanel = (props: PodInfoPanelProps) => (
           </div>
         </div>
       </div>
-    )}
+      );
+    }}
   </Show>
 );
 

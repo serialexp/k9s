@@ -44,6 +44,30 @@ export const apiPlugin: FastifyPluginAsync<ApiPluginOptions> = async (fastify, o
     }
   });
 
+  fastify.post<{ Body: { name: string } }>('/namespaces', async (request, reply) => {
+    const { name } = request.body;
+    if (!name || typeof name !== 'string') {
+      reply.code(400);
+      return { error: 'name is required' };
+    }
+    try {
+      await kube.createNamespace(name);
+      reply.code(201);
+      return { name };
+    } catch (error) {
+      const err = error as { statusCode?: number; body?: { message?: string }; message?: string };
+      if (err.statusCode === 401) {
+        reply.code(401);
+        return { error: err.body?.message || err.message || 'Authentication failed. Please check your Kubernetes credentials.' };
+      }
+      if (err.statusCode === 409) {
+        reply.code(409);
+        return { error: `Namespace '${name}' already exists` };
+      }
+      throw error;
+    }
+  });
+
   fastify.get('/nodes', async (request, reply) => {
     try {
       const { nodes, pools } = await kube.listNodes();
