@@ -1,10 +1,16 @@
 import { PassThrough } from "stream";
+import { ClusterRoleService } from "./resources/ClusterRoleService.js";
+import { ExecService } from "./resources/ExecService.js";
+import { NodeExecService } from "./resources/NodeExecService.js";
+import { NamespaceService } from "./resources/NamespaceService.js";
 import { NodeClassService } from "./resources/NodeClassService.js";
 import { NodePoolService } from "./resources/NodePoolService.js";
+import { RoleService } from "./resources/RoleService.js";
 import { StorageClassService } from "./resources/StorageClassService.js";
 import { ConfigMapService } from "./resources/ConfigMapService.js";
 import { SecretService } from "./resources/SecretService.js";
 import { HpaService } from "./resources/HpaService.js";
+import { PdbService } from "./resources/PdbService.js";
 import { PortForwardService } from "./resources/PortForwardService.js";
 import { CRDNotInstalledError } from "./base/errors.js";
 import {
@@ -71,14 +77,51 @@ export type {
 	SecretWatchEvent,
 } from "./resources/SecretService.types.js";
 export type {
+	HpaBehavior,
 	HpaDetail,
+	HpaEvent,
 	HpaListItem,
+	HpaMetricValue,
+	HpaScalingPolicy,
+	HpaScalingRules,
 	HpaWatchEvent,
 } from "./resources/HpaService.types.js";
+export type {
+	PdbDetail,
+	PdbEvent,
+	PdbListItem,
+	PdbWatchEvent,
+} from "./resources/PdbService.types.js";
 export type {
 	ActivePortForward,
 	PortForwardRequest,
 } from "./resources/PortForwardService.types.js";
+export type {
+	ExecRequest,
+	ExecResult,
+} from "./resources/ExecService.types.js";
+export type {
+	DebugSession,
+	NodeExecResult,
+} from "./resources/NodeExecService.types.js";
+export type {
+	PolicyRule,
+	RoleDetail,
+	RoleListItem,
+	RoleWatchEvent,
+} from "./resources/RoleService.types.js";
+export type {
+	AggregationRule,
+	ClusterRoleDetail,
+	ClusterRoleListItem,
+	ClusterRoleWatchEvent,
+} from "./resources/ClusterRoleService.types.js";
+export type {
+	NamespaceDetail,
+	NamespaceEvent,
+	NamespaceListItem,
+	NamespaceWatchEvent,
+} from "./resources/NamespaceService.types.js";
 export { CRDNotInstalledError } from "./base/errors.js";
 
 const of = <T>(value: T) =>
@@ -179,8 +222,10 @@ export interface PodListItem {
 	namespace: string;
 	phase: string | undefined;
 	restarts: number;
+	lastRestartTime?: string;
 	containers: string[];
 	nodeName?: string;
+	podIP?: string;
 	creationTimestamp?: string;
 	cpuRequests?: string;
 	memoryRequests?: string;
@@ -269,6 +314,10 @@ export interface NodeEvent {
 	firstTimestamp?: string;
 	lastTimestamp?: string;
 	source?: string;
+}
+
+export interface ClusterNodeEvent extends NodeEvent {
+	nodeName: string;
 }
 
 export interface PodDetail extends PodListItem {
@@ -1057,12 +1106,18 @@ export class KubeService {
 	private crdCache: Map<string, boolean> = new Map();
 	private static readonly IPV4_REGEX = /^(?:\d{1,3}\.){3}\d{1,3}$/;
 
+	private clusterRoleService: ClusterRoleService;
+	private execService: ExecService;
+	private namespaceService: NamespaceService;
+	private nodeExecService: NodeExecService;
 	private nodeClassService: NodeClassService;
 	private nodePoolService: NodePoolService;
+	private roleService: RoleService;
 	private storageClassService: StorageClassService;
 	private configMapService: ConfigMapService;
 	private secretService: SecretService;
 	private hpaService: HpaService;
+	private pdbService: PdbService;
 	private portForwardService: PortForwardService;
 
 	constructor() {
@@ -1078,17 +1133,22 @@ export class KubeService {
 		this.watch = new Watch(this.kubeConfig);
 		this.log = new Log(this.kubeConfig);
 
+		this.clusterRoleService = new ClusterRoleService(this.kubeConfig);
+		this.execService = new ExecService(this.kubeConfig);
+		this.namespaceService = new NamespaceService(this.kubeConfig);
+		this.nodeExecService = new NodeExecService(this.kubeConfig);
 		this.nodeClassService = new NodeClassService(this.kubeConfig);
 		this.nodePoolService = new NodePoolService(this.kubeConfig);
+		this.roleService = new RoleService(this.kubeConfig);
 		this.storageClassService = new StorageClassService(this.kubeConfig);
 		this.configMapService = new ConfigMapService(this.kubeConfig);
 		this.secretService = new SecretService(this.kubeConfig);
 		this.hpaService = new HpaService(this.kubeConfig);
+		this.pdbService = new PdbService(this.kubeConfig);
 		this.portForwardService = new PortForwardService(this.kubeConfig);
 	}
 
 	refreshCredentials() {
-		this.kubeConfig = new KubeConfig();
 		this.kubeConfig.loadFromDefault();
 		this.coreApi = this.kubeConfig.makeApiClient(CoreV1Api);
 		this.appsApi = this.kubeConfig.makeApiClient(AppsV1Api);
@@ -1100,12 +1160,18 @@ export class KubeService {
 		this.watch = new Watch(this.kubeConfig);
 		this.log = new Log(this.kubeConfig);
 
+		this.clusterRoleService.refreshCredentials();
+		this.execService.refreshCredentials();
+		this.namespaceService.refreshCredentials();
+		this.nodeExecService.refreshCredentials();
 		this.nodeClassService.refreshCredentials();
 		this.nodePoolService.refreshCredentials();
+		this.roleService.refreshCredentials();
 		this.storageClassService.refreshCredentials();
 		this.configMapService.refreshCredentials();
 		this.secretService.refreshCredentials();
 		this.hpaService.refreshCredentials();
+		this.pdbService.refreshCredentials();
 		this.portForwardService.refreshCredentials();
 	}
 
@@ -1152,23 +1218,50 @@ export class KubeService {
 		this.watch = new Watch(this.kubeConfig);
 		this.log = new Log(this.kubeConfig);
 
+		this.clusterRoleService.refreshCredentials();
+		this.execService.refreshCredentials();
+		this.namespaceService.refreshCredentials();
+		this.nodeExecService.refreshCredentials();
 		this.nodeClassService.refreshCredentials();
 		this.nodePoolService.refreshCredentials();
+		this.roleService.refreshCredentials();
 		this.storageClassService.refreshCredentials();
 		this.configMapService.refreshCredentials();
 		this.secretService.refreshCredentials();
 		this.hpaService.refreshCredentials();
+		this.pdbService.refreshCredentials();
 		this.portForwardService.stopAllForwards();
 		this.portForwardService.refreshCredentials();
 	}
 
+	// Namespace methods - delegated to NamespaceService
 	async listNamespaces() {
+		return this.namespaceService.listNamespaces();
+	}
+
+	async listNamespaceNames() {
 		return this.withCredentialRetry(async () => {
 			const list = await this.coreApi.listNamespace();
 			return (list.items ?? [])
 				.map((ns: V1Namespace) => ns.metadata?.name)
 				.filter((name): name is string => Boolean(name));
 		});
+	}
+
+	async getNamespace(name: string) {
+		return this.namespaceService.getNamespace(name);
+	}
+
+	async getNamespaceManifest(name: string) {
+		return this.namespaceService.getNamespaceManifest(name);
+	}
+
+	async getNamespaceEvents(name: string, limit?: number) {
+		return this.namespaceService.getNamespaceEvents(name, limit);
+	}
+
+	async deleteNamespace(name: string) {
+		return this.namespaceService.deleteNamespace(name);
 	}
 
 	async createNamespace(name: string) {
@@ -1184,6 +1277,14 @@ export class KubeService {
 	}
 
 	async streamNamespaces(
+		onData: (data: string) => void,
+		onError: (err: unknown) => void,
+		signal?: AbortSignal,
+	) {
+		return this.namespaceService.streamNamespaces(onData, onError, signal);
+	}
+
+	async streamNamespaceNames(
 		onData: (data: string) => void,
 		onError: (err: unknown) => void,
 		signal?: AbortSignal,
@@ -1580,6 +1681,35 @@ export class KubeService {
 
 			return (events.items ?? [])
 				.map((event: CoreV1Event) => ({
+					type: event.type ?? "",
+					reason: event.reason ?? "",
+					message: event.message ?? "",
+					count: event.count,
+					firstTimestamp: event.firstTimestamp?.toISOString(),
+					lastTimestamp: event.lastTimestamp?.toISOString(),
+					source: event.source?.component ?? event.reportingComponent,
+				}))
+				.sort((a, b) => {
+					const timeA = new Date(
+						a.lastTimestamp ?? a.firstTimestamp ?? "",
+					).getTime();
+					const timeB = new Date(
+						b.lastTimestamp ?? b.firstTimestamp ?? "",
+					).getTime();
+					return timeB - timeA;
+				});
+		});
+	}
+
+	async listAllNodeEvents(): Promise<ClusterNodeEvent[]> {
+		return this.withCredentialRetry(async () => {
+			const events = await this.coreApi.listEventForAllNamespaces({
+				fieldSelector: "involvedObject.kind=Node",
+			});
+
+			return (events.items ?? [])
+				.map((event: CoreV1Event) => ({
+					nodeName: event.involvedObject?.name ?? "unknown",
 					type: event.type ?? "",
 					reason: event.reason ?? "",
 					message: event.message ?? "",
@@ -2854,12 +2984,22 @@ export class KubeService {
 		let requestController: AbortController;
 		let metricsInterval: ReturnType<typeof setInterval> | undefined;
 		let usageByPod = new Map<string, ResourceUsage>();
+		const podCache = new Map<string, V1Pod>();
 
 		const refreshMetrics = async () => {
 			try {
 				usageByPod = await this.withCredentialRetry(() =>
 					this.loadPodMetrics(namespace),
 				);
+				// Push updated metrics for all cached pods
+				for (const [name, pod] of podCache) {
+					onData(
+						JSON.stringify({
+							type: "MODIFIED",
+							object: this.mapPodListItem(pod, usageByPod.get(name)),
+						}),
+					);
+				}
 			} catch {
 				usageByPod = new Map();
 			}
@@ -2876,6 +3016,12 @@ export class KubeService {
 						try {
 							const pod = obj as V1Pod;
 							const name = pod.metadata?.name ?? "";
+							// Maintain pod cache for metrics updates
+							if (type === "DELETED") {
+								podCache.delete(name);
+							} else if (name) {
+								podCache.set(name, pod);
+							}
 							onData(
 								JSON.stringify({
 									type,
@@ -3023,6 +3169,17 @@ export class KubeService {
 			(acc, cs) => acc + (cs.restartCount ?? 0),
 			0,
 		);
+		// Find the most recent restart time across all containers
+		let lastRestartTime: string | undefined;
+		for (const cs of containerStatuses) {
+			const finishedAt = cs.lastState?.terminated?.finishedAt;
+			if (finishedAt) {
+				const finishedAtStr = new Date(finishedAt).toISOString();
+				if (!lastRestartTime || finishedAtStr > lastRestartTime) {
+					lastRestartTime = finishedAtStr;
+				}
+			}
+		}
 		const creationTimestamp = pod.metadata?.creationTimestamp
 			? new Date(pod.metadata.creationTimestamp).toISOString()
 			: undefined;
@@ -3032,8 +3189,10 @@ export class KubeService {
 			namespace: pod.metadata?.namespace ?? "default",
 			phase: pod.status?.phase,
 			restarts,
+			lastRestartTime,
 			containers: (pod.spec?.containers ?? []).map((c) => c.name),
 			nodeName: pod.spec?.nodeName ?? undefined,
+			podIP: pod.status?.podIP ?? undefined,
 			creationTimestamp,
 			cpuRequests,
 			memoryRequests,
@@ -6239,6 +6398,14 @@ export class KubeService {
 		return this.hpaService.deleteHpa(namespace, hpaName);
 	}
 
+	async patchHpaMinReplicas(
+		namespace: string,
+		hpaName: string,
+		minReplicas: number,
+	) {
+		return this.hpaService.patchHpaMinReplicas(namespace, hpaName, minReplicas);
+	}
+
 	async streamHpas(
 		namespace: string,
 		onData: (data: string) => void,
@@ -6246,6 +6413,40 @@ export class KubeService {
 		signal?: AbortSignal,
 	) {
 		return this.hpaService.streamHpas(namespace, onData, onError, signal);
+	}
+
+	async getHpaEvents(namespace: string, hpaName: string) {
+		return this.hpaService.getHpaEvents(namespace, hpaName);
+	}
+
+	// PodDisruptionBudget methods - delegated to PdbService
+	async listPdbs(namespace: string) {
+		return this.pdbService.listPdbs(namespace);
+	}
+
+	async getPdb(namespace: string, pdbName: string) {
+		return this.pdbService.getPdb(namespace, pdbName);
+	}
+
+	async getPdbManifest(namespace: string, pdbName: string) {
+		return this.pdbService.getPdbManifest(namespace, pdbName);
+	}
+
+	async deletePdb(namespace: string, pdbName: string) {
+		return this.pdbService.deletePdb(namespace, pdbName);
+	}
+
+	async getPdbEvents(namespace: string, pdbName: string) {
+		return this.pdbService.getPdbEvents(namespace, pdbName);
+	}
+
+	async streamPdbs(
+		namespace: string,
+		onData: (data: string) => void,
+		onError: (err: unknown) => void,
+		signal?: AbortSignal,
+	) {
+		return this.pdbService.streamPdbs(namespace, onData, onError, signal);
 	}
 
 	// Port forward methods
@@ -6273,6 +6474,46 @@ export class KubeService {
 
 	stopAllPortForwards() {
 		return this.portForwardService.stopAllForwards();
+	}
+
+	// Exec methods
+	async execInPod(
+		namespace: string,
+		pod: string,
+		container: string,
+		command: string[],
+	) {
+		return this.execService.execInPod({
+			namespace,
+			pod,
+			container,
+			command,
+		});
+	}
+
+	// Node exec methods
+	async createNodeDebugSession(nodeName: string) {
+		return this.nodeExecService.createDebugSession(nodeName);
+	}
+
+	async execOnNode(sessionId: string, command: string[]) {
+		return this.nodeExecService.execOnNode(sessionId, command);
+	}
+
+	async deleteNodeDebugSession(sessionId: string) {
+		return this.nodeExecService.deleteDebugSession(sessionId);
+	}
+
+	getNodeDebugSession(sessionId: string) {
+		return this.nodeExecService.getSession(sessionId);
+	}
+
+	listNodeDebugSessions() {
+		return this.nodeExecService.listSessions();
+	}
+
+	async cleanupAllNodeDebugSessions() {
+		return this.nodeExecService.cleanupAllSessions();
 	}
 
 	// ExternalSecret methods
@@ -7419,6 +7660,57 @@ export class KubeService {
 			onError,
 			signal,
 		);
+	}
+
+	// Role methods - delegated to RoleService
+	async listRoles(namespace: string) {
+		return this.roleService.listRoles(namespace);
+	}
+
+	async getRole(namespace: string, roleName: string) {
+		return this.roleService.getRole(namespace, roleName);
+	}
+
+	async getRoleManifest(namespace: string, roleName: string) {
+		return this.roleService.getRoleManifest(namespace, roleName);
+	}
+
+	async deleteRole(namespace: string, roleName: string) {
+		return this.roleService.deleteRole(namespace, roleName);
+	}
+
+	async streamRoles(
+		namespace: string,
+		onData: (data: string) => void,
+		onError: (err: unknown) => void,
+		signal?: AbortSignal,
+	) {
+		return this.roleService.streamRoles(namespace, onData, onError, signal);
+	}
+
+	// ClusterRole methods - delegated to ClusterRoleService
+	async listClusterRoles() {
+		return this.clusterRoleService.listClusterRoles();
+	}
+
+	async getClusterRole(name: string) {
+		return this.clusterRoleService.getClusterRole(name);
+	}
+
+	async getClusterRoleManifest(name: string) {
+		return this.clusterRoleService.getClusterRoleManifest(name);
+	}
+
+	async deleteClusterRole(name: string) {
+		return this.clusterRoleService.deleteClusterRole(name);
+	}
+
+	async streamClusterRoles(
+		onData: (data: string) => void,
+		onError: (err: unknown) => void,
+		signal?: AbortSignal,
+	) {
+		return this.clusterRoleService.streamClusterRoles(onData, onError, signal);
 	}
 
 	// NodeClass methods - delegated to NodeClassService

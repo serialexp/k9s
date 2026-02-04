@@ -2,6 +2,7 @@ import { batch, createEffect, createSignal, Match, onCleanup, Show, Switch } fro
 import { useNavigate, useParams } from '@solidjs/router';
 import ExternalSecretTable from '../components/ExternalSecretTable';
 import ExternalSecretInfoPanel from '../components/ExternalSecretInfoPanel';
+import ManifestViewer from '../components/ManifestViewer';
 import ExternalSecretStatusPanel from '../components/ExternalSecretStatusPanel';
 import ExternalSecretEventsPanel from '../components/ExternalSecretEventsPanel';
 import ResourceActions, { type ResourceAction } from '../components/ResourceActions';
@@ -324,19 +325,7 @@ const ExternalSecretListPage = () => {
                     <ExternalSecretInfoPanel externalsecret={externalsecretDetail()} loading={externalsecretDetailLoading()} />
                   </Match>
                   <Match when={tab() === 'manifest'}>
-                    <Show
-                      when={!externalsecretDetailLoading()}
-                      fallback={<span class="loading loading-dots" />}
-                    >
-                      <Show
-                        when={manifest()}
-                        fallback={<p class="text-sm opacity-60">Manifest unavailable.</p>}
-                      >
-                        <pre class="overflow-auto rounded-lg bg-base-300/60 p-4 text-xs">
-                          {manifest()}
-                        </pre>
-                      </Show>
-                    </Show>
+                    <ManifestViewer manifest={manifest()} loading={externalsecretDetailLoading()} />
                   </Match>
                   <Match when={tab() === 'events'}>
                     <ExternalSecretEventsPanel events={externalsecretEvents()} loading={externalsecretEventsLoading()} />

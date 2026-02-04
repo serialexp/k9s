@@ -3,9 +3,11 @@
 
 import { batch, createEffect, createSignal, Match, Show, Switch } from 'solid-js';
 import { useParams, useNavigate } from '@solidjs/router';
+import ManifestViewer from '../components/ManifestViewer';
 import NodeTable from '../components/NodeTable';
 import NodeInfoPanel from '../components/NodeInfoPanel';
 import NodeEventsPanel from '../components/NodeEventsPanel';
+import NodeExecDialog from '../components/NodeExecDialog';
 import ResourceActions, { type ResourceAction } from '../components/ResourceActions';
 import {
   ApiError,
@@ -40,6 +42,7 @@ const NodeListPage = () => {
   const [manifest, setManifest] = createSignal<string>('');
   const [nodeEvents, setNodeEvents] = createSignal<NodeEvent[]>([]);
   const [nodeEventsLoading, setNodeEventsLoading] = createSignal(false);
+  const [execDialogOpen, setExecDialogOpen] = createSignal(false);
 
   let requestId = 0;
 
@@ -248,7 +251,18 @@ const NodeListPage = () => {
                     Events
                   </button>
                 </div>
-                <ResourceActions actions={nodeActions()} />
+                <div class="flex items-center gap-2">
+                  <Show when={resourceName()}>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-sm"
+                      onClick={() => setExecDialogOpen(true)}
+                    >
+                      Exec
+                    </button>
+                  </Show>
+                  <ResourceActions actions={nodeActions()} />
+                </div>
               </div>
               <div class="divider my-0 flex-shrink-0" />
               <div class="p-6 flex-1 overflow-y-auto">
@@ -257,19 +271,7 @@ const NodeListPage = () => {
                     <NodeInfoPanel node={nodeDetail()} loading={nodeDetailLoading()} />
                   </Match>
                   <Match when={tab() === 'manifest'}>
-                    <Show
-                      when={!nodeDetailLoading()}
-                      fallback={<span class="loading loading-dots" />}
-                    >
-                      <Show
-                        when={manifest()}
-                        fallback={<p class="text-sm opacity-60">Select a node to view its manifest.</p>}
-                      >
-                        <pre class="overflow-auto rounded-lg bg-base-300/60 p-4 text-xs">
-                          {manifest()}
-                        </pre>
-                      </Show>
-                    </Show>
+                    <ManifestViewer manifest={manifest()} loading={nodeDetailLoading()} />
                   </Match>
                   <Match when={tab() === 'events'}>
                     <NodeEventsPanel events={nodeEvents()} loading={nodeEventsLoading()} />
@@ -280,6 +282,14 @@ const NodeListPage = () => {
           </div>
         </section>
       </div>
+
+      <Show when={resourceName()}>
+        <NodeExecDialog
+          open={execDialogOpen()}
+          nodeName={resourceName()!}
+          onClose={() => setExecDialogOpen(false)}
+        />
+      </Show>
     </main>
   );
 };

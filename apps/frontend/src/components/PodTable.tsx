@@ -4,12 +4,20 @@ import { formatRelativeTime } from '../utils/datetime';
 import { formatResourceLine } from '../utils/resources';
 import { portForwardStore } from '../stores/portForwardStore';
 
+const ONE_HOUR_MS = 60 * 60 * 1000;
+
+const hasRecentRestart = (pod: PodListItem): boolean => {
+  if (pod.restarts === 0 || !pod.lastRestartTime) return false;
+  const lastRestart = new Date(pod.lastRestartTime).getTime();
+  return Date.now() - lastRestart < ONE_HOUR_MS;
+};
+
 const generateMarkdownTable = (pods: PodListItem[]): string => {
   const headers = ['Name', 'Namespace', 'Status', 'Usage', 'Requests', 'Age'];
   const separator = headers.map(() => '---');
 
   const rows = pods.map((pod) => {
-    const status = pod.restarts > 0 ? `${pod.phase ?? 'Unknown'} (${pod.restarts} restarts)` : (pod.phase ?? 'Unknown');
+    const status = hasRecentRestart(pod) ? `${pod.phase ?? 'Unknown'} (${pod.restarts} restarts)` : (pod.phase ?? 'Unknown');
     const usage = formatResourceLine(pod.cpuUsage, pod.memoryUsage);
     const requests = formatResourceLine(pod.cpuRequests, pod.memoryRequests);
     const age = formatRelativeTime(pod.creationTimestamp);
@@ -50,9 +58,20 @@ const phaseBadgeClass = (phase?: string) => {
 
 const PodTable = (props: PodTableProps) => {
   const [copied, setCopied] = createSignal(false);
+  const [search, setSearch] = createSignal('');
+
+  const filteredPods = () => {
+    const query = search().toLowerCase().trim();
+    if (!query) return props.pods;
+    return props.pods.filter((pod) =>
+      pod.name.toLowerCase().includes(query) ||
+      pod.podIP?.includes(query) ||
+      pod.nodeName?.toLowerCase().includes(query)
+    );
+  };
 
   const handleCopy = async () => {
-    const markdown = generateMarkdownTable(props.pods);
+    const markdown = generateMarkdownTable(filteredPods());
     await navigator.clipboard.writeText(markdown);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -63,6 +82,13 @@ const PodTable = (props: PodTableProps) => {
     <div class="flex items-center justify-between">
       <h2 class="text-lg font-semibold">Pods</h2>
       <div class="flex items-center gap-2">
+        <input
+          type="text"
+          placeholder="Filter by name, IP, or node..."
+          class="input input-bordered input-sm w-64"
+          value={search()}
+          onInput={(e) => setSearch(e.currentTarget.value)}
+        />
         <Show when={props.pods.length > 0}>
           <button
             type="button"
@@ -99,16 +125,16 @@ const PodTable = (props: PodTableProps) => {
         </thead>
         <tbody>
           <Show
-            when={props.pods.length}
+            when={filteredPods().length}
             fallback={
               <tr>
                 <td colSpan={5} class="text-center text-sm opacity-70">
-                  No pods in this namespace.
+                  {search() ? 'No pods match the filter.' : 'No pods in this namespace.'}
                 </td>
               </tr>
             }
           >
-            <For each={props.pods}>
+            <For each={filteredPods()}>
               {(pod) => (
                 <tr
                   class={`cursor-pointer hover:bg-base-200/50 ${props.selectedPod === pod.name ? 'bg-primary/20 border-l-4 border-primary' : ''}`}
@@ -129,7 +155,7 @@ const PodTable = (props: PodTableProps) => {
                   <td class="text-xs opacity-80">{pod.namespace}</td>
                   <td class="flex items-center gap-1">
                     <span class={`badge badge-sm ${phaseBadgeClass(pod.phase)}`}>{pod.phase ?? 'Unknown'}</span>
-                    <Show when={pod.restarts > 0}>
+                    <Show when={hasRecentRestart(pod)}>
                       <span class="badge badge-outline badge-xs">{pod.restarts}</span>
                     </Show>
                   </td>

@@ -1,4 +1,5 @@
 import { batch, createEffect, createSignal, Match, onCleanup, Show, Switch } from 'solid-js';
+import ManifestViewer from '../components/ManifestViewer';
 import PodTable from '../components/PodTable';
 import PodInfoPanel from '../components/PodInfoPanel';
 import PodEventsPanel from '../components/PodEventsPanel';
@@ -237,22 +238,10 @@ const DashboardPage = () => {
             <div class="p-6 flex-1 overflow-y-auto">
               <Switch>
                 <Match when={uiStore.selectedPodTab() === 'info'}>
-                  <PodInfoPanel pod={podDetail()} loading={podDetailLoading()} />
+                  <PodInfoPanel pod={podDetail()} events={podEvents()} loading={podDetailLoading()} />
                 </Match>
                 <Match when={uiStore.selectedPodTab() === 'manifest'}>
-                  <Show
-                    when={!podDetailLoading()}
-                    fallback={<span class="loading loading-dots" />}
-                  >
-                    <Show
-                      when={manifest()}
-                      fallback={<p class="text-sm opacity-60">Manifest unavailable.</p>}
-                    >
-                      <pre class="overflow-auto rounded-lg bg-base-300/60 p-4 text-xs">
-                        {manifest()}
-                      </pre>
-                    </Show>
-                  </Show>
+                  <ManifestViewer manifest={manifest()} loading={podDetailLoading()} />
                 </Match>
                 <Match when={uiStore.selectedPodTab() === 'events'}>
                   <PodEventsPanel events={podEvents()} loading={podEventsLoading()} />

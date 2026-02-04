@@ -3,6 +3,7 @@ import { useNavigate, useParams } from '@solidjs/router';
 import CustomResourceDefinitionTable from '../components/CustomResourceDefinitionTable';
 import CustomResourceDefinitionInfoPanel from '../components/CustomResourceDefinitionInfoPanel';
 import CustomResourceDefinitionVersionsPanel from '../components/CustomResourceDefinitionVersionsPanel';
+import ManifestViewer from '../components/ManifestViewer';
 import ResourceActions, { type ResourceAction } from '../components/ResourceActions';
 import { contextStore } from '../stores/contextStore';
 import {
@@ -290,16 +291,7 @@ const CustomResourceDefinitionListPage = () => {
                     <CustomResourceDefinitionInfoPanel crd={crdDetail()} loading={crdDetailLoading()} />
                   </Match>
                   <Match when={tab() === 'manifest'}>
-                    <Show
-                      when={!crdDetailLoading()}
-                      fallback={<span class="loading loading-dots" />}
-                    >
-                      <Show when={manifest()} fallback={<p class="text-sm opacity-60">Manifest unavailable.</p>}>
-                        <pre class="overflow-auto rounded-lg bg-base-300/60 p-4 text-xs">
-                          {manifest()}
-                        </pre>
-                      </Show>
-                    </Show>
+                    <ManifestViewer manifest={manifest()} loading={crdDetailLoading()} />
                   </Match>
                   <Match when={tab() === 'versions'}>
                     <CustomResourceDefinitionVersionsPanel crd={crdDetail()} loading={crdDetailLoading()} />

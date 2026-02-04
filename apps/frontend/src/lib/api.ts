@@ -15,6 +15,44 @@ export interface NamespaceWatchEvent {
   object: string;
 }
 
+export interface NamespaceListItem {
+  name: string;
+  status: string;
+  labels: Record<string, string>;
+  creationTimestamp?: string;
+  podCount: number;
+  cpuRequests?: string;
+  cpuUsage?: string;
+  cpuUsageUtilization?: number;
+  memoryRequests?: string;
+  memoryUsage?: string;
+  memoryUsageUtilization?: number;
+}
+
+export interface NamespaceDetail extends NamespaceListItem {
+  annotations: Record<string, string>;
+  finalizers: string[];
+}
+
+export interface NamespaceFullWatchEvent {
+  type: 'ADDED' | 'MODIFIED' | 'DELETED' | string;
+  object: NamespaceListItem;
+}
+
+export interface NamespaceEvent {
+  type: string;
+  reason: string;
+  message: string;
+  count?: number;
+  firstTimestamp?: string;
+  lastTimestamp?: string;
+  source?: string;
+  involvedObject: {
+    kind: string;
+    name: string;
+  };
+}
+
 export interface NodeBlocker {
   podName?: string;
   namespace?: string;
@@ -110,6 +148,10 @@ export interface NodeEvent {
   source?: string;
 }
 
+export interface ClusterNodeEvent extends NodeEvent {
+  nodeName: string;
+}
+
 export interface NodePoolSummary {
   name: string;
   nodeCount: number;
@@ -148,8 +190,10 @@ export interface PodListItem {
   namespace: string;
   phase?: string;
   restarts: number;
+  lastRestartTime?: string;
   containers: string[];
   nodeName?: string;
+  podIP?: string;
   creationTimestamp?: string;
   cpuRequests?: string;
   memoryRequests?: string;
@@ -758,6 +802,34 @@ export interface SecretDetail extends SecretListItem {
   data: Record<string, string>;
 }
 
+export interface HpaMetricValue {
+  type: string;
+  name: string;
+  currentValue?: string;
+  currentAverageValue?: string;
+  currentAverageUtilization?: number;
+  targetValue?: string;
+  targetAverageValue?: string;
+  targetAverageUtilization?: number;
+}
+
+export interface HpaScalingPolicy {
+  type: string;
+  value: number;
+  periodSeconds: number;
+}
+
+export interface HpaScalingRules {
+  stabilizationWindowSeconds?: number;
+  selectPolicy?: string;
+  policies?: HpaScalingPolicy[];
+}
+
+export interface HpaBehavior {
+  scaleUp?: HpaScalingRules;
+  scaleDown?: HpaScalingRules;
+}
+
 export interface HpaListItem {
   name: string;
   namespace: string;
@@ -767,6 +839,8 @@ export interface HpaListItem {
   desiredReplicas?: number;
   targetCPUUtilization?: number;
   targetMemoryUtilization?: number;
+  currentCPUUtilization?: number;
+  currentMemoryUtilization?: number;
   creationTimestamp?: string;
 }
 
@@ -779,6 +853,9 @@ export interface HpaDetail extends HpaListItem {
     name?: string;
   };
   metrics: Array<Record<string, unknown>>;
+  currentMetrics: HpaMetricValue[];
+  lastScaleTime?: string;
+  behavior?: HpaBehavior;
   conditions?: Array<{
     type: string;
     status: string;
@@ -786,6 +863,56 @@ export interface HpaDetail extends HpaListItem {
     reason?: string;
     message?: string;
   }>;
+}
+
+export interface HpaEvent {
+  type: string;
+  reason: string;
+  message: string;
+  count?: number;
+  firstTimestamp?: string;
+  lastTimestamp?: string;
+  source?: string;
+}
+
+export interface PdbListItem {
+  name: string;
+  namespace: string;
+  minAvailable?: string;
+  maxUnavailable?: string;
+  currentHealthy?: number;
+  desiredHealthy?: number;
+  disruptionsAllowed?: number;
+  expectedPods?: number;
+  creationTimestamp?: string;
+}
+
+export interface PdbDetail extends PdbListItem {
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  selector?: Record<string, string>;
+  conditions?: Array<{
+    type: string;
+    status: string;
+    lastTransitionTime?: string;
+    reason?: string;
+    message?: string;
+  }>;
+}
+
+export interface PdbWatchEvent {
+  type: string;
+  object: PdbListItem;
+}
+
+export interface PdbEvent {
+  type: string;
+  reason: string;
+  message: string;
+  count?: number;
+  firstTimestamp?: string;
+  lastTimestamp?: string;
+  source?: string;
 }
 
 export interface ExternalSecretListItem {
@@ -1014,6 +1141,61 @@ export interface StorageClassWatchEvent {
   object: StorageClassListItem;
 }
 
+export interface PolicyRule {
+  apiGroups: string[];
+  resources: string[];
+  verbs: string[];
+  resourceNames?: string[];
+  nonResourceURLs?: string[];
+}
+
+export interface RoleListItem {
+  name: string;
+  namespace: string;
+  ruleCount: number;
+  creationTimestamp?: string;
+}
+
+export interface RoleDetail extends RoleListItem {
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  rules: PolicyRule[];
+}
+
+export interface RoleWatchEvent {
+  type: 'ADDED' | 'MODIFIED' | 'DELETED' | string;
+  object: RoleListItem;
+}
+
+export interface AggregationRule {
+  clusterRoleSelectors?: Array<{
+    matchLabels?: Record<string, string>;
+    matchExpressions?: Array<{
+      key: string;
+      operator: string;
+      values?: string[];
+    }>;
+  }>;
+}
+
+export interface ClusterRoleListItem {
+  name: string;
+  ruleCount: number;
+  aggregationRule?: AggregationRule;
+  creationTimestamp?: string;
+}
+
+export interface ClusterRoleDetail extends ClusterRoleListItem {
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  rules: PolicyRule[];
+}
+
+export interface ClusterRoleWatchEvent {
+  type: 'ADDED' | 'MODIFIED' | 'DELETED' | string;
+  object: ClusterRoleListItem;
+}
+
 export interface NodeClassListItem {
   name: string;
   amiFamily?: string;
@@ -1226,7 +1408,36 @@ export async function selectContext(name: string): Promise<void> {
 }
 
 export async function fetchNamespaces(): Promise<NamespaceList> {
-  return apiFetch<NamespaceList>(`/namespaces`);
+  return apiFetch<NamespaceList>(`/namespaces/names`);
+}
+
+export async function fetchNamespacesFull(): Promise<NamespaceListItem[]> {
+  const data = await apiFetch<{ items: NamespaceListItem[] }>(`/namespaces`);
+  return data.items;
+}
+
+export async function fetchNamespace(name: string): Promise<NamespaceDetail> {
+  return apiFetch<NamespaceDetail>(`/namespaces/${encodeURIComponent(name)}`);
+}
+
+export async function fetchNamespaceManifest(name: string): Promise<string> {
+  const response = await fetch(`${API_BASE}/namespaces/${encodeURIComponent(name)}/manifest`);
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Failed to load manifest (${response.status})`);
+  }
+  return await response.text();
+}
+
+export async function fetchNamespaceEvents(name: string): Promise<NamespaceEvent[]> {
+  const data = await apiFetch<{ items: NamespaceEvent[] }>(`/namespaces/${encodeURIComponent(name)}/events`);
+  return data.items;
+}
+
+export async function deleteNamespace(name: string): Promise<void> {
+  await apiFetch<void>(`/namespaces/${encodeURIComponent(name)}`, {
+    method: 'DELETE'
+  });
 }
 
 export async function createNamespace(name: string): Promise<void> {
@@ -1245,6 +1456,48 @@ export function subscribeToNamespaceEvents(
   eventSource.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data) as NamespaceWatchEvent;
+      onEvent(data);
+    } catch (error) {
+      console.error('Failed to parse namespace watch event', error);
+    }
+  };
+
+  eventSource.addEventListener('error', (event) => {
+    if (event.type === 'error' && 'data' in event) {
+      try {
+        const messageEvent = event as MessageEvent;
+        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
+        const apiError = new ApiError(
+          errorData.message,
+          errorData.statusCode || 500,
+          errorData.statusCode === 401
+        );
+        onError?.(apiError);
+      } catch {
+        console.error('Namespace watch stream error', event);
+      }
+    }
+    eventSource.close();
+  });
+
+  eventSource.onerror = () => {
+    eventSource.close();
+  };
+
+  return () => {
+    eventSource.close();
+  };
+}
+
+export function subscribeToNamespaceFullEvents(
+  onEvent: (event: NamespaceFullWatchEvent) => void,
+  onError?: (error: ApiError) => void
+): () => void {
+  const eventSource = new EventSource(`${EVENTS_BASE}/namespaces/full`);
+
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data) as NamespaceFullWatchEvent;
       onEvent(data);
     } catch (error) {
       console.error('Failed to parse namespace watch event', error);
@@ -1306,6 +1559,11 @@ export async function fetchNodeManifest(name: string): Promise<string> {
 
 export async function fetchNodeEvents(name: string): Promise<NodeEvent[]> {
   const data = await apiFetch<{ events: NodeEvent[] }>(`/nodes/${encodeURIComponent(name)}/events`);
+  return data.events;
+}
+
+export async function fetchAllNodeEvents(): Promise<ClusterNodeEvent[]> {
+  const data = await apiFetch<{ events: ClusterNodeEvent[] }>('/events/nodes');
   return data.events;
 }
 
@@ -1413,6 +1671,71 @@ export async function evictPod(namespace: string, pod: string): Promise<void> {
   await apiFetch<void>(`/namespaces/${encodeURIComponent(namespace)}/pods/${encodeURIComponent(pod)}/evict`, {
     method: 'POST'
   });
+}
+
+export interface ExecResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+}
+
+export async function execInPod(
+  namespace: string,
+  pod: string,
+  container: string,
+  command: string[]
+): Promise<ExecResult> {
+  return apiFetch<ExecResult>(
+    `/namespaces/${encodeURIComponent(namespace)}/pods/${encodeURIComponent(pod)}/exec`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ container, command })
+    }
+  );
+}
+
+export interface DebugSession {
+  id: string;
+  nodeName: string;
+  podName: string;
+  namespace: string;
+  createdAt: string;
+  status: 'creating' | 'ready' | 'error' | 'terminated';
+}
+
+export interface NodeExecResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+}
+
+export async function createNodeDebugSession(nodeName: string): Promise<DebugSession> {
+  return apiFetch<DebugSession>(
+    `/nodes/${encodeURIComponent(nodeName)}/debug-session`,
+    { method: 'POST' }
+  );
+}
+
+export async function execOnNode(
+  sessionId: string,
+  command: string[]
+): Promise<NodeExecResult> {
+  return apiFetch<NodeExecResult>(
+    `/node-debug-sessions/${encodeURIComponent(sessionId)}/exec`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command })
+    }
+  );
+}
+
+export async function deleteNodeDebugSession(sessionId: string): Promise<void> {
+  await apiFetch<void>(
+    `/node-debug-sessions/${encodeURIComponent(sessionId)}`,
+    { method: 'DELETE' }
+  );
 }
 
 // Deployment API functions
@@ -2213,6 +2536,21 @@ export async function deleteHpa(namespace: string, hpa: string): Promise<void> {
   });
 }
 
+export async function patchHpaMinReplicas(namespace: string, hpa: string, minReplicas: number): Promise<void> {
+  await apiFetch<void>(`/namespaces/${encodeURIComponent(namespace)}/hpas/${encodeURIComponent(hpa)}/minreplicas`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ minReplicas })
+  });
+}
+
+export async function fetchHpaEvents(namespace: string, hpa: string): Promise<HpaEvent[]> {
+  const data = await apiFetch<{ events: HpaEvent[] }>(`/namespaces/${encodeURIComponent(namespace)}/hpas/${encodeURIComponent(hpa)}/events`);
+  return data.events;
+}
+
 export function subscribeToHpaEvents(
   namespace: string,
   onEvent: (event: HpaWatchEvent) => void,
@@ -2242,6 +2580,82 @@ export function subscribeToHpaEvents(
         onError?.(apiError);
       } catch {
         console.error('HPA watch stream error', event);
+      }
+    }
+    eventSource.close();
+  });
+
+  eventSource.onerror = () => {
+    eventSource.close();
+  };
+
+  return () => {
+    eventSource.close();
+  };
+}
+
+// PodDisruptionBudget API functions
+export async function fetchPdbs(namespace: string): Promise<PdbListItem[]> {
+  const data = await apiFetch<{ items: PdbListItem[] }>(`/namespaces/${encodeURIComponent(namespace)}/pdbs`);
+  return data.items;
+}
+
+export async function fetchPdb(namespace: string, pdb: string): Promise<PdbDetail> {
+  return apiFetch<PdbDetail>(`/namespaces/${encodeURIComponent(namespace)}/pdbs/${encodeURIComponent(pdb)}`);
+}
+
+export async function fetchPdbManifest(namespace: string, pdb: string): Promise<string> {
+  const response = await fetch(
+    `${API_BASE}/namespaces/${encodeURIComponent(namespace)}/pdbs/${encodeURIComponent(pdb)}/manifest`
+  );
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Failed to load manifest (${response.status})`);
+  }
+  const data = await response.json();
+  return data.manifest;
+}
+
+export async function deletePdb(namespace: string, pdb: string): Promise<void> {
+  await apiFetch<void>(`/namespaces/${encodeURIComponent(namespace)}/pdbs/${encodeURIComponent(pdb)}`, {
+    method: 'DELETE'
+  });
+}
+
+export async function fetchPdbEvents(namespace: string, pdb: string): Promise<PdbEvent[]> {
+  const data = await apiFetch<{ events: PdbEvent[] }>(`/namespaces/${encodeURIComponent(namespace)}/pdbs/${encodeURIComponent(pdb)}/events`);
+  return data.events;
+}
+
+export function subscribeToPdbEvents(
+  namespace: string,
+  onEvent: (event: PdbWatchEvent) => void,
+  onError?: (error: ApiError) => void
+): () => void {
+  const eventSource = new EventSource(`${EVENTS_BASE}/pdbs?namespace=${encodeURIComponent(namespace)}`);
+
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data) as PdbWatchEvent;
+      onEvent(data);
+    } catch (error) {
+      console.error('Failed to parse pdb watch event', error);
+    }
+  };
+
+  eventSource.addEventListener('error', (event) => {
+    if (event.type === 'error' && 'data' in event) {
+      try {
+        const messageEvent = event as MessageEvent;
+        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
+        const apiError = new ApiError(
+          errorData.message,
+          errorData.statusCode || 500,
+          errorData.statusCode === 401
+        );
+        onError?.(apiError);
+      } catch {
+        console.error('PDB watch stream error', event);
       }
     }
     eventSource.close();
@@ -2610,6 +3024,143 @@ export function subscribeToStorageClassEvents(
         onError?.(apiError);
       } catch {
         console.error('StorageClass watch stream error', event);
+      }
+    }
+    eventSource.close();
+  });
+
+  eventSource.onerror = () => {
+    eventSource.close();
+  };
+
+  return () => {
+    eventSource.close();
+  };
+}
+
+// Role API functions
+export async function fetchRoles(namespace: string): Promise<RoleListItem[]> {
+  const data = await apiFetch<{ items: RoleListItem[] }>(`/namespaces/${encodeURIComponent(namespace)}/roles`);
+  return data.items;
+}
+
+export async function fetchRole(namespace: string, role: string): Promise<RoleDetail> {
+  return apiFetch<RoleDetail>(`/namespaces/${encodeURIComponent(namespace)}/roles/${encodeURIComponent(role)}`);
+}
+
+export async function fetchRoleManifest(namespace: string, role: string): Promise<string> {
+  const response = await fetch(
+    `${API_BASE}/namespaces/${encodeURIComponent(namespace)}/roles/${encodeURIComponent(role)}/manifest`
+  );
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Failed to load manifest (${response.status})`);
+  }
+  return await response.text();
+}
+
+export async function deleteRole(namespace: string, role: string): Promise<void> {
+  await apiFetch<void>(`/namespaces/${encodeURIComponent(namespace)}/roles/${encodeURIComponent(role)}`, {
+    method: 'DELETE'
+  });
+}
+
+export function subscribeToRoleEvents(
+  namespace: string,
+  onEvent: (event: RoleWatchEvent) => void,
+  onError?: (error: ApiError) => void
+): () => void {
+  const eventSource = new EventSource(`${EVENTS_BASE}/roles?namespace=${encodeURIComponent(namespace)}`);
+
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data) as RoleWatchEvent;
+      onEvent(data);
+    } catch (error) {
+      console.error('Failed to parse role watch event', error);
+    }
+  };
+
+  eventSource.addEventListener('error', (event) => {
+    if (event.type === 'error' && 'data' in event) {
+      try {
+        const messageEvent = event as MessageEvent;
+        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
+        const apiError = new ApiError(
+          errorData.message,
+          errorData.statusCode || 500,
+          errorData.statusCode === 401
+        );
+        onError?.(apiError);
+      } catch {
+        console.error('Role watch stream error', event);
+      }
+    }
+    eventSource.close();
+  });
+
+  eventSource.onerror = () => {
+    eventSource.close();
+  };
+
+  return () => {
+    eventSource.close();
+  };
+}
+
+// ClusterRole API functions
+export async function fetchClusterRoles(): Promise<ClusterRoleListItem[]> {
+  const data = await apiFetch<{ items: ClusterRoleListItem[] }>('/clusterroles');
+  return data.items;
+}
+
+export async function fetchClusterRole(name: string): Promise<ClusterRoleDetail> {
+  return apiFetch<ClusterRoleDetail>(`/clusterroles/${encodeURIComponent(name)}`);
+}
+
+export async function fetchClusterRoleManifest(name: string): Promise<string> {
+  const response = await fetch(`${API_BASE}/clusterroles/${encodeURIComponent(name)}/manifest`);
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Failed to load manifest (${response.status})`);
+  }
+  return await response.text();
+}
+
+export async function deleteClusterRole(name: string): Promise<void> {
+  await apiFetch<void>(`/clusterroles/${encodeURIComponent(name)}`, {
+    method: 'DELETE'
+  });
+}
+
+export function subscribeToClusterRoleEvents(
+  onEvent: (event: ClusterRoleWatchEvent) => void,
+  onError?: (error: ApiError) => void
+): () => void {
+  const eventSource = new EventSource(`${EVENTS_BASE}/clusterroles`);
+
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data) as ClusterRoleWatchEvent;
+      onEvent(data);
+    } catch (error) {
+      console.error('Failed to parse ClusterRole watch event', error);
+    }
+  };
+
+  eventSource.addEventListener('error', (event) => {
+    if (event.type === 'error' && 'data' in event) {
+      try {
+        const messageEvent = event as MessageEvent;
+        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
+        const apiError = new ApiError(
+          errorData.message,
+          errorData.statusCode || 500,
+          errorData.statusCode === 401
+        );
+        onError?.(apiError);
+      } catch {
+        console.error('ClusterRole watch stream error', event);
       }
     }
     eventSource.close();

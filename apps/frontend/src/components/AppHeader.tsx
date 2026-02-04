@@ -67,9 +67,12 @@ const AppHeader = (props: AppHeaderProps) => {
     { value: 'storageclasses', label: 'StorageClasses' },
     // Access Control
     { value: 'serviceaccounts', label: 'ServiceAccounts' },
+    { value: 'roles', label: 'Roles' },
+    { value: 'clusterroles', label: 'ClusterRoles' },
     // Autoscaling
     { value: 'scaledobjects', label: 'ScaledObjects' },
     { value: 'hpas', label: 'HPAs' },
+    { value: 'pdbs', label: 'PDBs' },
     // Cluster
     { value: 'nodeclasses', label: 'NodeClasses' },
     { value: 'nodepools', label: 'NodePools' },
@@ -158,6 +161,13 @@ const AppHeader = (props: AppHeaderProps) => {
               onClick={() => handleResourceTypeChange('nodes')}
             >
               Nodes
+            </button>
+            <button
+              type="button"
+              class="btn btn-xs btn-outline"
+              onClick={() => handleResourceTypeChange('node-events')}
+            >
+              Node Events
             </button>
             <button
               type="button"

@@ -24,11 +24,9 @@ const HpaTable = (props: HpaTableProps) => (
         <thead>
           <tr class="text-sm uppercase tracking-wide text-base-content/60">
             <th>Name</th>
-            <th>Min/Max Replicas</th>
-            <th>Current Replicas</th>
-            <th>Desired Replicas</th>
-            <th>Target CPU</th>
-            <th>Target Memory</th>
+            <th>Replicas</th>
+            <th>CPU</th>
+            <th>Memory</th>
             <th>Age</th>
           </tr>
         </thead>
@@ -37,7 +35,7 @@ const HpaTable = (props: HpaTableProps) => (
             when={props.hpas.length}
             fallback={
               <tr>
-                <td colSpan={7} class="text-center text-sm opacity-70">
+                <td colSpan={5} class="text-center text-sm opacity-70">
                   No HPAs in this namespace.
                 </td>
               </tr>
@@ -51,15 +49,23 @@ const HpaTable = (props: HpaTableProps) => (
                 >
                   <td class="font-mono text-sm">{hpa.name}</td>
                   <td class="text-xs opacity-80">
-                    {hpa.minReplicas ?? '—'} / {hpa.maxReplicas}
-                  </td>
-                  <td class="text-xs opacity-80">{hpa.currentReplicas ?? '—'}</td>
-                  <td class="text-xs opacity-80">{hpa.desiredReplicas ?? '—'}</td>
-                  <td class="text-xs opacity-80">
-                    {hpa.targetCPUUtilization != null ? `${hpa.targetCPUUtilization}%` : '—'}
+                    {hpa.currentReplicas ?? '—'}/{hpa.desiredReplicas ?? '—'} ({hpa.minReplicas ?? '—'}-{hpa.maxReplicas})
                   </td>
                   <td class="text-xs opacity-80">
-                    {hpa.targetMemoryUtilization != null ? `${hpa.targetMemoryUtilization}%` : '—'}
+                    {hpa.currentCPUUtilization != null ? (
+                      <span class={hpa.targetCPUUtilization != null && hpa.currentCPUUtilization < hpa.targetCPUUtilization ? 'text-success' : ''}>
+                        {hpa.currentCPUUtilization}%
+                      </span>
+                    ) : '—'}
+                    {hpa.targetCPUUtilization != null ? ` / ${hpa.targetCPUUtilization}%` : ''}
+                  </td>
+                  <td class="text-xs opacity-80">
+                    {hpa.currentMemoryUtilization != null ? (
+                      <span class={hpa.targetMemoryUtilization != null && hpa.currentMemoryUtilization < hpa.targetMemoryUtilization ? 'text-success' : ''}>
+                        {hpa.currentMemoryUtilization}%
+                      </span>
+                    ) : '—'}
+                    {hpa.targetMemoryUtilization != null ? ` / ${hpa.targetMemoryUtilization}%` : ''}
                   </td>
                   <td class="text-xs opacity-80">{formatRelativeTime(hpa.creationTimestamp)}</td>
                 </tr>

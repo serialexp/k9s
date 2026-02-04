@@ -14,6 +14,7 @@ import DaemonSetListPage from './routes/DaemonSetListPage';
 import ConfigMapListPage from './routes/ConfigMapListPage';
 import SecretListPage from './routes/SecretListPage';
 import HpaListPage from './routes/HpaListPage';
+import PdbListPage from './routes/PdbListPage';
 import ExternalSecretListPage from './routes/ExternalSecretListPage';
 import SecretStoreListPage from './routes/SecretStoreListPage';
 import CustomResourceDefinitionListPage from './routes/CustomResourceDefinitionListPage';
@@ -23,11 +24,14 @@ import NodeClassListPage from './routes/NodeClassListPage';
 import NodePoolListPage from './routes/NodePoolListPage';
 import NodePoolSummaryPage from './routes/NodePoolSummaryPage';
 import NotFound from './routes/NotFound';
+import NodeEventsPage from './routes/NodeEventsPage';
 import NodeListPage from './routes/NodeListPage';
 import NamespaceListPage from './routes/NamespaceListPage';
 import StatefulSetListPage from './routes/StatefulSetListPage';
 import JobListPage from './routes/JobListPage';
 import ServiceAccountListPage from './routes/ServiceAccountListPage';
+import RoleListPage from './routes/RoleListPage';
+import ClusterRoleListPage from './routes/ClusterRoleListPage';
 import ArgoApplicationListPage from './routes/ArgoApplicationListPage';
 import RolloutListPage from './routes/RolloutListPage';
 import ApplicationsPage from './routes/ApplicationsPage';
@@ -99,6 +103,13 @@ const App = () => {
             </LayoutWrapper>
           )} />
 
+          {/* Node Events route */}
+          <Route path="/:context/:namespace/node-events" component={() => (
+            <LayoutWrapper>
+              <NodeEventsPage />
+            </LayoutWrapper>
+          )} />
+
           {/* Node Pool Summary route */}
           <Route path="/:context/:namespace/node-pool-summary" component={() => (
             <LayoutWrapper>
@@ -108,6 +119,16 @@ const App = () => {
 
           {/* Namespace routes */}
           <Route path="/:context/:namespace/namespaces" component={() => (
+            <LayoutWrapper>
+              <NamespaceListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/namespaces/:resourceName" component={() => (
+            <LayoutWrapper>
+              <NamespaceListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/namespaces/:resourceName/:tab" component={() => (
             <LayoutWrapper>
               <NamespaceListPage />
             </LayoutWrapper>
@@ -324,6 +345,21 @@ const App = () => {
               <HpaListPage />
             </LayoutWrapper>
           )} />
+          <Route path="/:context/:namespace/pdbs" component={() => (
+            <LayoutWrapper>
+              <PdbListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/pdbs/:resourceName" component={() => (
+            <LayoutWrapper>
+              <PdbListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/pdbs/:resourceName/:tab" component={() => (
+            <LayoutWrapper>
+              <PdbListPage />
+            </LayoutWrapper>
+          )} />
           <Route path="/:context/:namespace/externalsecrets" component={() => (
             <LayoutWrapper>
               <ExternalSecretListPage />
@@ -446,6 +482,36 @@ const App = () => {
           <Route path="/:context/:namespace/serviceaccounts/:resourceName/:tab" component={() => (
             <LayoutWrapper>
               <ServiceAccountListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/roles" component={() => (
+            <LayoutWrapper>
+              <RoleListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/roles/:resourceName" component={() => (
+            <LayoutWrapper>
+              <RoleListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/roles/:resourceName/:tab" component={() => (
+            <LayoutWrapper>
+              <RoleListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/clusterroles" component={() => (
+            <LayoutWrapper>
+              <ClusterRoleListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/clusterroles/:resourceName" component={() => (
+            <LayoutWrapper>
+              <ClusterRoleListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/clusterroles/:resourceName/:tab" component={() => (
+            <LayoutWrapper>
+              <ClusterRoleListPage />
             </LayoutWrapper>
           )} />
 

@@ -2,6 +2,7 @@ import { batch, createEffect, createSignal, Match, onCleanup, Show, Switch } fro
 import { useParams, useNavigate } from '@solidjs/router';
 import DeploymentTable from '../components/DeploymentTable';
 import DeploymentInfoPanel from '../components/DeploymentInfoPanel';
+import ManifestViewer from '../components/ManifestViewer';
 import DeploymentEventsPanel from '../components/DeploymentEventsPanel';
 import DeploymentStatusPanel from '../components/DeploymentStatusPanel';
 import DeploymentHistoryPanel from '../components/DeploymentHistoryPanel';
@@ -423,19 +424,7 @@ const DeploymentListPage = () => {
                   <DeploymentInfoPanel deployment={deploymentDetail()} loading={deploymentDetailLoading()} />
                 </Match>
                 <Match when={tab() === 'manifest'}>
-                  <Show
-                    when={!deploymentDetailLoading()}
-                    fallback={<span class="loading loading-dots" />}
-                  >
-                    <Show
-                      when={manifest()}
-                      fallback={<p class="text-sm opacity-60">Manifest unavailable.</p>}
-                    >
-                      <pre class="overflow-auto rounded-lg bg-base-300/60 p-4 text-xs">
-                        {manifest()}
-                      </pre>
-                    </Show>
-                  </Show>
+                  <ManifestViewer manifest={manifest()} loading={deploymentDetailLoading()} />
                 </Match>
                 <Match when={tab() === 'events'}>
                   <DeploymentEventsPanel events={deploymentEvents()} loading={deploymentEventsLoading()} />

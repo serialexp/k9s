@@ -1,6 +1,7 @@
 import { batch, createEffect, createSignal, Match, onCleanup, Show, Switch } from 'solid-js';
 import { useNavigate, useParams } from '@solidjs/router';
 import IngressTable from '../components/IngressTable';
+import ManifestViewer from '../components/ManifestViewer';
 import ResourceActions, { type ResourceAction } from '../components/ResourceActions';
 import { contextStore } from '../stores/contextStore';
 import {
@@ -394,16 +395,7 @@ const IngressListPage = () => {
                     </Show>
                   </Match>
                   <Match when={tab() === 'manifest'}>
-                    <Show when={!ingressDetailLoading()} fallback={<span class="loading loading-dots" />}>
-                      <Show
-                        when={manifest()}
-                        fallback={<p class="text-sm opacity-60">Manifest unavailable.</p>}
-                      >
-                        <pre class="overflow-auto rounded-lg bg-base-300/60 p-4 text-xs">
-                          {manifest()}
-                        </pre>
-                      </Show>
-                    </Show>
+                    <ManifestViewer manifest={manifest()} loading={ingressDetailLoading()} />
                   </Match>
                 </Switch>
               </div>

@@ -1,5 +1,6 @@
 import { batch, createEffect, createSignal, Match, onCleanup, Show, Switch } from 'solid-js';
 import { useNavigate, useParams } from '@solidjs/router';
+import ManifestViewer from '../components/ManifestViewer';
 import ServiceAccountTable from '../components/ServiceAccountTable';
 import ServiceAccountInfoPanel from '../components/ServiceAccountInfoPanel';
 import ResourceActions, { type ResourceAction } from '../components/ResourceActions';
@@ -286,19 +287,7 @@ const ServiceAccountListPage = () => {
                     <ServiceAccountInfoPanel serviceAccount={serviceAccountDetail()} loading={serviceAccountDetailLoading()} />
                   </Match>
                   <Match when={tab() === 'manifest'}>
-                    <Show
-                      when={!serviceAccountDetailLoading()}
-                      fallback={<span class="loading loading-dots" />}
-                    >
-                      <Show
-                        when={manifest()}
-                        fallback={<p class="text-sm opacity-60">Manifest unavailable.</p>}
-                      >
-                        <pre class="overflow-auto rounded-lg bg-base-300/60 p-4 text-xs">
-                          {manifest()}
-                        </pre>
-                      </Show>
-                    </Show>
+                    <ManifestViewer manifest={manifest()} loading={serviceAccountDetailLoading()} />
                   </Match>
                 </Switch>
               </div>

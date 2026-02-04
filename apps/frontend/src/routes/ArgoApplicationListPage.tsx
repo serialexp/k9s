@@ -2,6 +2,7 @@ import { batch, createEffect, createSignal, Match, onCleanup, Show, Switch } fro
 import { useNavigate, useParams } from '@solidjs/router';
 import ArgoApplicationTable from '../components/ArgoApplicationTable';
 import ArgoApplicationInfoPanel from '../components/ArgoApplicationInfoPanel';
+import ManifestViewer from '../components/ManifestViewer';
 import ArgoApplicationStatusPanel from '../components/ArgoApplicationStatusPanel';
 import ResourceActions, { type ResourceAction } from '../components/ResourceActions';
 import { contextStore } from '../stores/contextStore';
@@ -304,19 +305,7 @@ const ArgoApplicationListPage = () => {
                     <ArgoApplicationInfoPanel application={applicationDetail()} loading={applicationDetailLoading()} />
                   </Match>
                   <Match when={tab() === 'manifest'}>
-                    <Show
-                      when={!applicationDetailLoading()}
-                      fallback={<span class="loading loading-dots" />}
-                    >
-                      <Show
-                        when={manifest()}
-                        fallback={<p class="text-sm opacity-60">Manifest unavailable.</p>}
-                      >
-                        <pre class="overflow-auto rounded-lg bg-base-300/60 p-4 text-xs">
-                          {manifest()}
-                        </pre>
-                      </Show>
-                    </Show>
+                    <ManifestViewer manifest={manifest()} loading={applicationDetailLoading()} />
                   </Match>
                   <Match when={tab() === 'status'}>
                     <ArgoApplicationStatusPanel status={applicationStatus()} loading={applicationStatusLoading()} />

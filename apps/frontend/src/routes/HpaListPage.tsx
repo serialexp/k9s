@@ -1,19 +1,24 @@
 import { batch, createEffect, createSignal, Match, onCleanup, Show, Switch, For } from 'solid-js';
 import { useNavigate, useParams } from '@solidjs/router';
+import HpaEventsPanel from '../components/HpaEventsPanel';
 import HpaTable from '../components/HpaTable';
+import ManifestViewer from '../components/ManifestViewer';
 import ResourceActions, { type ResourceAction } from '../components/ResourceActions';
 import { contextStore } from '../stores/contextStore';
 import {
   ApiError,
   deleteHpa,
   fetchHpa,
+  fetchHpaEvents,
   fetchHpaManifest,
   fetchHpas,
   subscribeToHpaEvents,
   type HpaDetail,
+  type HpaEvent,
   type HpaListItem,
   type HpaWatchEvent
 } from '../lib/api';
+import { formatRelativeTime } from '../utils/datetime';
 
 const applyHpaWatchEvent = (hpas: HpaListItem[], event: HpaWatchEvent): HpaListItem[] => {
   const { type, object } = event;
@@ -50,6 +55,8 @@ const HpaListPage = () => {
   const [manifest, setManifest] = createSignal<string>('');
 
   const [contextError, setContextError] = createSignal<string>('');
+  const [hpaEvents, setHpaEvents] = createSignal<HpaEvent[]>([]);
+  const [hpaEventsLoading, setHpaEventsLoading] = createSignal(false);
 
   let unsubscribeHpaStream: (() => void) | undefined;
 
@@ -112,21 +119,26 @@ const HpaListPage = () => {
 
   const loadHpaDetail = async (ns: string, name: string) => {
     setHpaDetailLoading(true);
+    setHpaEventsLoading(true);
     try {
-      const [detail, manifestYaml] = await Promise.all([
+      const [detail, manifestYaml, events] = await Promise.all([
         fetchHpa(ns, name),
-        fetchHpaManifest(ns, name)
+        fetchHpaManifest(ns, name),
+        fetchHpaEvents(ns, name)
       ]);
       batch(() => {
         setHpaDetail(detail);
         setManifest(manifestYaml);
+        setHpaEvents(events);
       });
     } catch (error) {
       console.error('Failed to load HPA detail', error);
       setHpaDetail(undefined);
       setManifest('');
+      setHpaEvents([]);
     } finally {
       setHpaDetailLoading(false);
+      setHpaEventsLoading(false);
     }
   };
 
@@ -285,6 +297,13 @@ const HpaListPage = () => {
                   >
                     Definition
                   </button>
+                  <button
+                    type="button"
+                    class={`tab ${tab() === 'events' ? 'tab-active' : ''}`}
+                    onClick={() => handleTabChange('events')}
+                  >
+                    Events
+                  </button>
                 </div>
                 <ResourceActions actions={hpaActions()} />
               </div>
@@ -309,8 +328,112 @@ const HpaListPage = () => {
                                 <div><span class="opacity-60">Current Replicas:</span> {detail().currentReplicas ?? '—'}</div>
                                 <div><span class="opacity-60">Desired Replicas:</span> {detail().desiredReplicas ?? '—'}</div>
                                 <div><span class="opacity-60">Created:</span> {detail().creationTimestamp || '—'}</div>
+                                <div><span class="opacity-60">Last Scale:</span> {detail().lastScaleTime ? formatRelativeTime(detail().lastScaleTime) : '—'}</div>
                               </div>
                             </div>
+                            <Show when={detail().currentMetrics && detail().currentMetrics.length > 0}>
+                              <div>
+                                <h3 class="text-sm font-semibold mb-2">Current Metrics</h3>
+                                <div class="space-y-2">
+                                  <For each={detail().currentMetrics}>
+                                    {(metric) => (
+                                      <div class="rounded-lg bg-base-200/40 p-3">
+                                        <div class="flex items-center justify-between text-sm mb-1">
+                                          <span class="font-semibold">{metric.name}</span>
+                                          <span class="badge badge-sm badge-ghost">{metric.type}</span>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-2 text-xs">
+                                          <Show when={metric.currentAverageUtilization !== undefined || metric.targetAverageUtilization !== undefined}>
+                                            <div>
+                                              <span class="opacity-60">Current:</span>{' '}
+                                              <span class={metric.currentAverageUtilization !== undefined && metric.targetAverageUtilization !== undefined && metric.currentAverageUtilization < metric.targetAverageUtilization ? 'text-success' : ''}>
+                                                {metric.currentAverageUtilization ?? '—'}%
+                                              </span>
+                                            </div>
+                                            <div>
+                                              <span class="opacity-60">Target:</span> {metric.targetAverageUtilization ?? '—'}%
+                                            </div>
+                                          </Show>
+                                          <Show when={metric.currentAverageValue || metric.targetAverageValue}>
+                                            <div><span class="opacity-60">Current Avg:</span> {metric.currentAverageValue || '—'}</div>
+                                            <div><span class="opacity-60">Target Avg:</span> {metric.targetAverageValue || '—'}</div>
+                                          </Show>
+                                          <Show when={metric.currentValue || metric.targetValue}>
+                                            <div><span class="opacity-60">Current:</span> {metric.currentValue || '—'}</div>
+                                            <div><span class="opacity-60">Target:</span> {metric.targetValue || '—'}</div>
+                                          </Show>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </For>
+                                </div>
+                              </div>
+                            </Show>
+                            <Show when={detail().behavior}>
+                              <div>
+                                <h3 class="text-sm font-semibold mb-2">Scaling Behavior</h3>
+                                <div class="grid grid-cols-2 gap-4 text-sm">
+                                  <Show when={detail().behavior?.scaleDown}>
+                                    <div class="rounded-lg bg-base-200/40 p-3">
+                                      <div class="font-semibold text-xs mb-2">Scale Down</div>
+                                      <div class="text-xs space-y-1">
+                                        <div>
+                                          <span class="opacity-60">Stabilization:</span>{' '}
+                                          {detail().behavior?.scaleDown?.stabilizationWindowSeconds ?? 300}s
+                                        </div>
+                                        <Show when={detail().behavior?.scaleDown?.selectPolicy}>
+                                          <div>
+                                            <span class="opacity-60">Policy:</span>{' '}
+                                            {detail().behavior?.scaleDown?.selectPolicy}
+                                          </div>
+                                        </Show>
+                                        <Show when={detail().behavior?.scaleDown?.policies?.length}>
+                                          <div class="mt-2">
+                                            <span class="opacity-60">Rules:</span>
+                                            <For each={detail().behavior?.scaleDown?.policies}>
+                                              {(policy) => (
+                                                <div class="ml-2 opacity-80">
+                                                  {policy.type}: {policy.value} per {policy.periodSeconds}s
+                                                </div>
+                                              )}
+                                            </For>
+                                          </div>
+                                        </Show>
+                                      </div>
+                                    </div>
+                                  </Show>
+                                  <Show when={detail().behavior?.scaleUp}>
+                                    <div class="rounded-lg bg-base-200/40 p-3">
+                                      <div class="font-semibold text-xs mb-2">Scale Up</div>
+                                      <div class="text-xs space-y-1">
+                                        <div>
+                                          <span class="opacity-60">Stabilization:</span>{' '}
+                                          {detail().behavior?.scaleUp?.stabilizationWindowSeconds ?? 0}s
+                                        </div>
+                                        <Show when={detail().behavior?.scaleUp?.selectPolicy}>
+                                          <div>
+                                            <span class="opacity-60">Policy:</span>{' '}
+                                            {detail().behavior?.scaleUp?.selectPolicy}
+                                          </div>
+                                        </Show>
+                                        <Show when={detail().behavior?.scaleUp?.policies?.length}>
+                                          <div class="mt-2">
+                                            <span class="opacity-60">Rules:</span>
+                                            <For each={detail().behavior?.scaleUp?.policies}>
+                                              {(policy) => (
+                                                <div class="ml-2 opacity-80">
+                                                  {policy.type}: {policy.value} per {policy.periodSeconds}s
+                                                </div>
+                                              )}
+                                            </For>
+                                          </div>
+                                        </Show>
+                                      </div>
+                                    </div>
+                                  </Show>
+                                </div>
+                              </div>
+                            </Show>
                             <div>
                               <h3 class="text-sm font-semibold mb-2">Scale Target</h3>
                               <div class="grid grid-cols-2 gap-2 text-sm">
@@ -388,16 +511,10 @@ const HpaListPage = () => {
                     </Show>
                   </Match>
                   <Match when={tab() === 'manifest'}>
-                    <Show when={!hpaDetailLoading()} fallback={<span class="loading loading-dots" />}>
-                      <Show
-                        when={manifest()}
-                        fallback={<p class="text-sm opacity-60">Manifest unavailable.</p>}
-                      >
-                        <pre class="overflow-auto rounded-lg bg-base-300/60 p-4 text-xs">
-                          {manifest()}
-                        </pre>
-                      </Show>
-                    </Show>
+                    <ManifestViewer manifest={manifest()} loading={hpaDetailLoading()} />
+                  </Match>
+                  <Match when={tab() === 'events'}>
+                    <HpaEventsPanel events={hpaEvents()} loading={hpaEventsLoading()} />
                   </Match>
                 </Switch>
               </div>

@@ -24,12 +24,15 @@ const LayoutWrapper = (props: LayoutWrapperProps) => {
     // Check each resource type in order (most specific first)
     if (path.includes('/installed-apps')) return 'installed-apps';
     if (path.includes('/namespaces')) return 'namespaces';
+    if (path.includes('/node-events')) return 'node-events';
     if (path.includes('/nodes')) return 'nodes';
     if (path.includes('/nodepools')) return 'nodepools';
     if (path.includes('/scaledobjects')) return 'scaledobjects';
     if (path.includes('/persistentvolumeclaims')) return 'persistentvolumeclaims';
     if (path.includes('/storageclasses')) return 'storageclasses';
     if (path.includes('/serviceaccounts')) return 'serviceaccounts';
+    if (path.includes('/clusterroles')) return 'clusterroles';
+    if (path.includes('/roles')) return 'roles';
     if (path.includes('/externalsecrets')) return 'externalsecrets';
     if (path.includes('/secretstores')) return 'secretstores';
     if (path.includes('/crds')) return 'crds';

@@ -1,11 +1,13 @@
 import { batch, createEffect, createSignal, Match, onCleanup, Show, Switch } from 'solid-js';
 import { useParams, useNavigate } from '@solidjs/router';
+import ManifestViewer from '../components/ManifestViewer';
 import PodTable from '../components/PodTable';
 import PodInfoPanel from '../components/PodInfoPanel';
 import PodEventsPanel from '../components/PodEventsPanel';
 import PodStatusPanel from '../components/PodStatusPanel';
 import LogViewer from '../components/LogViewer';
 import PortForwardDialog from '../components/PortForwardDialog';
+import ExecDialog from '../components/ExecDialog';
 import ResourceActions, { type ResourceAction } from '../components/ResourceActions';
 import { portForwardStore } from '../stores/portForwardStore';
 import { contextStore } from '../stores/contextStore';
@@ -80,6 +82,7 @@ const ResourceListPage = () => {
   const [contextError, setContextError] = createSignal<string>('');
 
   const [portForwardDialogOpen, setPortForwardDialogOpen] = createSignal(false);
+  const [execDialogOpen, setExecDialogOpen] = createSignal(false);
 
   let unsubscribePodStream: (() => void) | undefined;
 
@@ -384,6 +387,13 @@ const ResourceListPage = () => {
                   <button
                     type="button"
                     class="btn btn-ghost btn-sm"
+                    onClick={() => setExecDialogOpen(true)}
+                  >
+                    Exec
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-sm"
                     onClick={() => setPortForwardDialogOpen(true)}
                   >
                     Port Forward
@@ -396,22 +406,10 @@ const ResourceListPage = () => {
             <div class="p-6 flex-1 overflow-y-auto">
               <Switch>
                 <Match when={tab() === 'info'}>
-                  <PodInfoPanel pod={podDetail()} loading={podDetailLoading()} />
+                  <PodInfoPanel pod={podDetail()} events={podEvents()} loading={podDetailLoading()} />
                 </Match>
                 <Match when={tab() === 'manifest'}>
-                  <Show
-                    when={!podDetailLoading()}
-                    fallback={<span class="loading loading-dots" />}
-                  >
-                    <Show
-                      when={manifest()}
-                      fallback={<p class="text-sm opacity-60">Manifest unavailable.</p>}
-                    >
-                      <pre class="overflow-auto rounded-lg bg-base-300/60 p-4 text-xs">
-                        {manifest()}
-                      </pre>
-                    </Show>
-                  </Show>
+                  <ManifestViewer manifest={manifest()} loading={podDetailLoading()} />
                 </Match>
                 <Match when={tab() === 'events'}>
                   <PodEventsPanel events={podEvents()} loading={podEventsLoading()} />
@@ -443,6 +441,13 @@ const ResourceListPage = () => {
           containerPorts={podDetail()?.containerPorts}
           onClose={() => setPortForwardDialogOpen(false)}
           onStart={handleStartPortForward}
+        />
+        <ExecDialog
+          open={execDialogOpen()}
+          namespace={namespace()}
+          pod={resourceName()!}
+          containers={(selectedPod()?.containers ?? []).map(name => ({ name }))}
+          onClose={() => setExecDialogOpen(false)}
         />
       </Show>
     </main>

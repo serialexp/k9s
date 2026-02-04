@@ -44,6 +44,106 @@ export const apiPlugin: FastifyPluginAsync<ApiPluginOptions> = async (fastify, o
     }
   });
 
+  fastify.get('/namespaces/names', async (request, reply) => {
+    try {
+      const namespaces = await kube.listNamespaceNames();
+      return { items: namespaces };
+    } catch (error) {
+      const err = error as { statusCode?: number; body?: { message?: string }; message?: string };
+      if (err.statusCode === 401) {
+        reply.code(401);
+        return { error: err.body?.message || err.message || 'Authentication failed. Please check your Kubernetes credentials.' };
+      }
+      throw error;
+    }
+  });
+
+  fastify.get<{ Params: { namespace: string } }>('/namespaces/:namespace', async (request, reply) => {
+    const { namespace } = request.params;
+    if (!namespace) {
+      reply.code(400);
+      return { error: 'namespace name is required' };
+    }
+    try {
+      const detail = await kube.getNamespace(namespace);
+      return detail;
+    } catch (error) {
+      const err = error as { statusCode?: number; body?: { message?: string }; message?: string };
+      if (err.statusCode === 401) {
+        reply.code(401);
+        return { error: err.body?.message || err.message || 'Authentication failed. Please check your Kubernetes credentials.' };
+      }
+      if (err.statusCode === 404) {
+        reply.code(404);
+        return { error: `Namespace '${namespace}' not found` };
+      }
+      throw error;
+    }
+  });
+
+  fastify.get<{ Params: { namespace: string } }>('/namespaces/:namespace/manifest', async (request, reply) => {
+    const { namespace } = request.params;
+    try {
+      const manifest = await kube.getNamespaceManifest(namespace);
+      reply.header('content-type', 'application/yaml');
+      return yaml.stringify(JSON.parse(manifest));
+    } catch (error) {
+      const err = error as { statusCode?: number; body?: { message?: string }; message?: string };
+      if (err.statusCode === 401) {
+        reply.code(401);
+        return { error: err.body?.message || err.message || 'Authentication failed. Please check your Kubernetes credentials.' };
+      }
+      if (err.statusCode === 404) {
+        reply.code(404);
+        return { error: `Namespace '${namespace}' not found` };
+      }
+      throw error;
+    }
+  });
+
+  fastify.get<{ Params: { namespace: string } }>('/namespaces/:namespace/events', async (request, reply) => {
+    const { namespace } = request.params;
+    try {
+      const events = await kube.getNamespaceEvents(namespace);
+      return { items: events };
+    } catch (error) {
+      const err = error as { statusCode?: number; body?: { message?: string }; message?: string };
+      if (err.statusCode === 401) {
+        reply.code(401);
+        return { error: err.body?.message || err.message || 'Authentication failed. Please check your Kubernetes credentials.' };
+      }
+      if (err.statusCode === 404) {
+        reply.code(404);
+        return { error: `Namespace '${namespace}' not found` };
+      }
+      throw error;
+    }
+  });
+
+  fastify.delete<{ Params: { namespace: string } }>('/namespaces/:namespace', async (request, reply) => {
+    const { namespace } = request.params;
+    if (!namespace) {
+      reply.code(400);
+      return { error: 'namespace name is required' };
+    }
+    try {
+      await kube.deleteNamespace(namespace);
+      reply.code(204);
+      return null;
+    } catch (error) {
+      const err = error as { statusCode?: number; body?: { message?: string }; message?: string };
+      if (err.statusCode === 401) {
+        reply.code(401);
+        return { error: err.body?.message || err.message || 'Authentication failed. Please check your Kubernetes credentials.' };
+      }
+      if (err.statusCode === 404) {
+        reply.code(404);
+        return { error: `Namespace '${namespace}' not found` };
+      }
+      throw error;
+    }
+  });
+
   fastify.post<{ Body: { name: string } }>('/namespaces', async (request, reply) => {
     const { name } = request.body;
     if (!name || typeof name !== 'string') {
@@ -109,6 +209,11 @@ export const apiPlugin: FastifyPluginAsync<ApiPluginOptions> = async (fastify, o
     return { events };
   });
 
+  fastify.get('/events/nodes', async () => {
+    const events = await kube.listAllNodeEvents();
+    return { events };
+  });
+
   fastify.post<{ Params: { node: string } }>('/nodes/:node/cordon', async (request, reply) => {
     const { node } = request.params;
     if (!node) {
@@ -139,6 +244,71 @@ export const apiPlugin: FastifyPluginAsync<ApiPluginOptions> = async (fastify, o
     }
     const result = await kube.drainNode(node);
     return result;
+  });
+
+  // Node exec routes (debug pod sessions)
+  fastify.post<{ Params: { node: string } }>('/nodes/:node/debug-session', async (request, reply) => {
+    const { node } = request.params;
+    if (!node) {
+      reply.code(400);
+      return { error: 'node name is required' };
+    }
+    try {
+      const session = await kube.createNodeDebugSession(node);
+      return session;
+    } catch (error) {
+      request.log.error(error);
+      reply.code(500);
+      return { error: (error as Error).message };
+    }
+  });
+
+  fastify.post<{
+    Params: { sessionId: string };
+    Body: { command: string[] };
+  }>('/node-debug-sessions/:sessionId/exec', async (request, reply) => {
+    const { sessionId } = request.params;
+    const { command } = request.body;
+    if (!sessionId) {
+      reply.code(400);
+      return { error: 'sessionId is required' };
+    }
+    if (!command || !Array.isArray(command) || command.length === 0) {
+      reply.code(400);
+      return { error: 'command must be a non-empty array of strings' };
+    }
+    try {
+      const result = await kube.execOnNode(sessionId, command);
+      return result;
+    } catch (error) {
+      const err = error as Error;
+      if (err.message.includes('not found') || err.message.includes('not ready')) {
+        reply.code(404);
+        return { error: err.message };
+      }
+      request.log.error(error);
+      reply.code(500);
+      return { error: err.message };
+    }
+  });
+
+  fastify.delete<{ Params: { sessionId: string } }>('/node-debug-sessions/:sessionId', async (request, reply) => {
+    const { sessionId } = request.params;
+    if (!sessionId) {
+      reply.code(400);
+      return { error: 'sessionId is required' };
+    }
+    const deleted = await kube.deleteNodeDebugSession(sessionId);
+    if (!deleted) {
+      reply.code(404);
+      return { error: 'Debug session not found' };
+    }
+    reply.code(204);
+    return null;
+  });
+
+  fastify.get('/node-debug-sessions', async () => {
+    return { items: kube.listNodeDebugSessions() };
   });
 
   fastify.get('/namespace-summaries', async (request, reply) => {
@@ -231,6 +401,39 @@ export const apiPlugin: FastifyPluginAsync<ApiPluginOptions> = async (fastify, o
     await kube.evictPod(namespace, pod);
     reply.code(204);
     return null;
+  });
+
+  fastify.post<{
+    Params: { namespace: string; pod: string };
+    Body: { container: string; command: string[] };
+  }>('/namespaces/:namespace/pods/:pod/exec', async (request, reply) => {
+    const { namespace, pod } = request.params;
+    const { container, command } = request.body;
+    if (!namespace || !pod) {
+      reply.code(400);
+      return { error: 'namespace and pod are required' };
+    }
+    if (!container) {
+      reply.code(400);
+      return { error: 'container is required' };
+    }
+    if (!command || !Array.isArray(command) || command.length === 0) {
+      reply.code(400);
+      return { error: 'command must be a non-empty array of strings' };
+    }
+    try {
+      const result = await kube.execInPod(namespace, pod, container, command);
+      return result;
+    } catch (error) {
+      const err = error as { statusCode?: number; body?: { message?: string }; message?: string };
+      if (err.statusCode === 401) {
+        reply.code(401);
+        return { error: err.body?.message || err.message || 'Authentication failed' };
+      }
+      request.log.error(error);
+      reply.code(500);
+      return { error: (error as Error).message };
+    }
   });
 
   // Deployment routes
@@ -977,6 +1180,83 @@ export const apiPlugin: FastifyPluginAsync<ApiPluginOptions> = async (fastify, o
     return null;
   });
 
+  fastify.patch<{ Params: { namespace: string; hpa: string }; Body: { minReplicas: number } }>('/namespaces/:namespace/hpas/:hpa/minreplicas', async (request, reply) => {
+    const { namespace, hpa } = request.params;
+    const { minReplicas } = request.body;
+    if (!namespace || !hpa) {
+      reply.code(400);
+      return { error: 'namespace and hpa are required' };
+    }
+    if (typeof minReplicas !== 'number' || minReplicas < 0) {
+      reply.code(400);
+      return { error: 'minReplicas must be a non-negative number' };
+    }
+    await kube.patchHpaMinReplicas(namespace, hpa, minReplicas);
+    reply.code(204);
+    return null;
+  });
+
+  fastify.get<{ Params: { namespace: string; hpa: string } }>('/namespaces/:namespace/hpas/:hpa/events', async (request, reply) => {
+    const { namespace, hpa } = request.params;
+    if (!namespace || !hpa) {
+      reply.code(400);
+      return { error: 'namespace and hpa are required' };
+    }
+    const events = await kube.getHpaEvents(namespace, hpa);
+    return { events };
+  });
+
+  // PodDisruptionBudget routes
+  fastify.get<{ Params: { namespace: string } }>('/namespaces/:namespace/pdbs', async (request, reply) => {
+    const { namespace } = request.params;
+    if (!namespace) {
+      reply.code(400);
+      return { error: 'namespace is required' };
+    }
+    const pdbs = await kube.listPdbs(namespace);
+    return { items: pdbs };
+  });
+
+  fastify.get<{ Params: { namespace: string; pdb: string } }>('/namespaces/:namespace/pdbs/:pdb', async (request, reply) => {
+    const { namespace, pdb } = request.params;
+    if (!namespace || !pdb) {
+      reply.code(400);
+      return { error: 'namespace and pdb are required' };
+    }
+    return kube.getPdb(namespace, pdb);
+  });
+
+  fastify.get<{ Params: { namespace: string; pdb: string } }>('/namespaces/:namespace/pdbs/:pdb/manifest', async (request, reply) => {
+    const { namespace, pdb } = request.params;
+    if (!namespace || !pdb) {
+      reply.code(400);
+      return { error: 'namespace and pdb are required' };
+    }
+    const manifest = await kube.getPdbManifest(namespace, pdb);
+    return { manifest };
+  });
+
+  fastify.delete<{ Params: { namespace: string; pdb: string } }>('/namespaces/:namespace/pdbs/:pdb', async (request, reply) => {
+    const { namespace, pdb } = request.params;
+    if (!namespace || !pdb) {
+      reply.code(400);
+      return { error: 'namespace and pdb are required' };
+    }
+    await kube.deletePdb(namespace, pdb);
+    reply.code(204);
+    return null;
+  });
+
+  fastify.get<{ Params: { namespace: string; pdb: string } }>('/namespaces/:namespace/pdbs/:pdb/events', async (request, reply) => {
+    const { namespace, pdb } = request.params;
+    if (!namespace || !pdb) {
+      reply.code(400);
+      return { error: 'namespace and pdb are required' };
+    }
+    const events = await kube.getPdbEvents(namespace, pdb);
+    return { events };
+  });
+
   // ExternalSecret routes
   fastify.get<{ Params: { namespace: string } }>('/namespaces/:namespace/externalsecrets', async (request, reply) => {
     const { namespace } = request.params;
@@ -1266,6 +1546,97 @@ export const apiPlugin: FastifyPluginAsync<ApiPluginOptions> = async (fastify, o
       return { error: 'storageclass is required' };
     }
     await kube.deleteStorageClass(storageclass);
+    reply.code(204);
+    return null;
+  });
+
+  // Role routes
+  fastify.get<{ Params: { namespace: string } }>('/namespaces/:namespace/roles', async (request, reply) => {
+    const { namespace } = request.params;
+    if (!namespace) {
+      reply.code(400);
+      return { error: 'namespace is required' };
+    }
+    try {
+      const roles = await kube.listRoles(namespace);
+      return { items: roles };
+    } catch (error) {
+      const err = error as { statusCode?: number; body?: { message?: string }; message?: string };
+      if (err.statusCode === 401) {
+        reply.code(401);
+        return { error: err.body?.message || err.message || 'Authentication failed. Please check your Kubernetes credentials.' };
+      }
+      throw error;
+    }
+  });
+
+  fastify.get<{ Params: { namespace: string; role: string } }>('/namespaces/:namespace/roles/:role', async (request, reply) => {
+    const { namespace, role } = request.params;
+    if (!namespace || !role) {
+      reply.code(400);
+      return { error: 'namespace and role are required' };
+    }
+    const detail = await kube.getRole(namespace, role);
+    return detail;
+  });
+
+  fastify.get<{ Params: { namespace: string; role: string } }>('/namespaces/:namespace/roles/:role/manifest', async (request, reply) => {
+    const { namespace, role } = request.params;
+    const manifest = await kube.getRoleManifest(namespace, role);
+    reply.header('content-type', 'application/yaml');
+    return yaml.stringify(JSON.parse(manifest));
+  });
+
+  fastify.delete<{ Params: { namespace: string; role: string } }>('/namespaces/:namespace/roles/:role', async (request, reply) => {
+    const { namespace, role } = request.params;
+    if (!namespace || !role) {
+      reply.code(400);
+      return { error: 'namespace and role are required' };
+    }
+    await kube.deleteRole(namespace, role);
+    reply.code(204);
+    return null;
+  });
+
+  // ClusterRole routes
+  fastify.get('/clusterroles', async (_request, reply) => {
+    try {
+      const clusterRoles = await kube.listClusterRoles();
+      return { items: clusterRoles };
+    } catch (error) {
+      const err = error as { statusCode?: number; body?: { message?: string }; message?: string };
+      if (err.statusCode === 401) {
+        reply.code(401);
+        return { error: err.body?.message || err.message || 'Authentication failed. Please check your Kubernetes credentials.' };
+      }
+      throw error;
+    }
+  });
+
+  fastify.get<{ Params: { clusterrole: string } }>('/clusterroles/:clusterrole', async (request, reply) => {
+    const { clusterrole } = request.params;
+    if (!clusterrole) {
+      reply.code(400);
+      return { error: 'clusterrole is required' };
+    }
+    const detail = await kube.getClusterRole(clusterrole);
+    return detail;
+  });
+
+  fastify.get<{ Params: { clusterrole: string } }>('/clusterroles/:clusterrole/manifest', async (request, reply) => {
+    const { clusterrole } = request.params;
+    const manifest = await kube.getClusterRoleManifest(clusterrole);
+    reply.header('content-type', 'application/yaml');
+    return yaml.stringify(JSON.parse(manifest));
+  });
+
+  fastify.delete<{ Params: { clusterrole: string } }>('/clusterroles/:clusterrole', async (request, reply) => {
+    const { clusterrole } = request.params;
+    if (!clusterrole) {
+      reply.code(400);
+      return { error: 'clusterrole is required' };
+    }
+    await kube.deleteClusterRole(clusterrole);
     reply.code(204);
     return null;
   });
