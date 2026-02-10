@@ -88,6 +88,7 @@ export interface NodeListItem {
   podIPsCapacity?: number;
   cpuRequests?: string;
   memoryRequests?: string;
+  totalRestarts: number;
   blockers?: NodeBlocker[];
   pods: Array<{
     name: string;
@@ -96,6 +97,7 @@ export interface NodeListItem {
     memoryRequests?: string;
     cpuUsage?: string;
     memoryUsage?: string;
+    restartCount: number;
   }>;
 }
 

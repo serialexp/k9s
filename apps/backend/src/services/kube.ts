@@ -163,6 +163,7 @@ type NodePodDetail = {
 	memoryRequests?: string;
 	cpuUsage?: string;
 	memoryUsage?: string;
+	restartCount: number;
 	nodeSelector?: Record<string, string>;
 	nodeAffinity?: V1NodeAffinity;
 	tolerations: V1Toleration[];
@@ -256,6 +257,7 @@ export interface NodeListItem {
 	podIPsCapacity?: number;
 	cpuRequests?: string;
 	memoryRequests?: string;
+	totalRestarts: number;
 	blockers?: NodeBlocker[];
 	pods: Array<{
 		name: string;
@@ -264,6 +266,7 @@ export interface NodeListItem {
 		memoryRequests?: string;
 		cpuUsage?: string;
 		memoryUsage?: string;
+		restartCount: number;
 	}>;
 }
 
@@ -1464,8 +1467,13 @@ export class KubeService {
 						memoryRequests: pod.memoryRequests,
 						cpuUsage: podUsage?.cpu,
 						memoryUsage: podUsage?.memory,
+						restartCount: pod.restartCount,
 					};
 				});
+				const totalRestarts = podDetails.reduce(
+					(acc, pod) => acc + pod.restartCount,
+					0,
+				);
 				const totals = this.aggregatePodResources(podDetails);
 				const cpuAllocatableMillicores = this.parseCpuQuantity(
 					node.status?.allocatable?.cpu,
@@ -1515,6 +1523,7 @@ export class KubeService {
 						podIPsCapacity: podIpCapacity,
 						cpuRequestsMillicores: totals.cpuMillicores,
 						memoryRequestsBytes: totals.memoryBytes,
+						totalRestarts,
 						pods,
 						blockers,
 					}),
@@ -1575,8 +1584,13 @@ export class KubeService {
 					memoryRequests: pod.memoryRequests,
 					cpuUsage: podUsage?.cpu,
 					memoryUsage: podUsage?.memory,
+					restartCount: pod.restartCount,
 				};
 			});
+			const totalRestarts = podDetails.reduce(
+				(acc, pod) => acc + pod.restartCount,
+				0,
+			);
 
 			const totals = this.aggregatePodResources(podDetails);
 			const cpuAllocatableMillicores = this.parseCpuQuantity(
@@ -1612,6 +1626,7 @@ export class KubeService {
 				podIPsCapacity: podIpCapacity,
 				cpuRequestsMillicores: totals.cpuMillicores,
 				memoryRequestsBytes: totals.memoryBytes,
+				totalRestarts,
 				pods,
 				blockers: [],
 			});
@@ -2180,6 +2195,10 @@ export class KubeService {
 				if (podIPs.length === 0 && pod.status?.podIP) {
 					podIPs.push(pod.status.podIP);
 				}
+				const restartCount = (pod.status?.containerStatuses ?? []).reduce(
+					(acc, cs) => acc + (cs.restartCount ?? 0),
+					0,
+				);
 				const details: NodePodDetail = {
 					name: pod.metadata?.name ?? "unknown",
 					namespace: pod.metadata?.namespace ?? "default",
@@ -2193,6 +2212,7 @@ export class KubeService {
 						memoryBytes > 0
 							? this.formatMemoryQuantity(memoryBytes)
 							: undefined,
+					restartCount,
 					nodeSelector: pod.spec?.nodeSelector ?? undefined,
 					nodeAffinity: pod.spec?.affinity?.nodeAffinity,
 					tolerations: (pod.spec?.tolerations ?? []) as V1Toleration[],
@@ -3248,6 +3268,7 @@ export class KubeService {
 			podIPsCapacity?: number;
 			cpuRequestsMillicores?: number;
 			memoryRequestsBytes?: number;
+			totalRestarts?: number;
 			pods?: NodeListItem["pods"];
 			blockers?: NodeBlocker[];
 		},
@@ -3342,6 +3363,7 @@ export class KubeService {
 			podIPsCapacity: options?.podIPsCapacity,
 			cpuRequests,
 			memoryRequests,
+			totalRestarts: options?.totalRestarts ?? 0,
 			pods: options?.pods ?? [],
 			blockers: options?.blockers ?? [],
 		};

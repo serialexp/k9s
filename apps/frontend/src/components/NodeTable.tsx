@@ -74,6 +74,7 @@ const NodeTable = (props: NodeTableProps) => {
               <th>CPU</th>
               <th>Memory</th>
               <th>Pods</th>
+              <th>Restarts</th>
               <th>Pod IPs</th>
               <th>Age</th>
               <th>Internal IP</th>
@@ -84,7 +85,7 @@ const NodeTable = (props: NodeTableProps) => {
               when={props.nodes.length}
               fallback={
                 <tr>
-                  <td colSpan={12} class="text-center text-sm opacity-70">
+                  <td colSpan={13} class="text-center text-sm opacity-70">
                     No nodes available.
                   </td>
                 </tr>
@@ -217,6 +218,16 @@ const NodeTable = (props: NodeTableProps) => {
                             </span>
                           </div>
                         </td>
+                        <td class="text-xs">
+                          <Show
+                            when={node.totalRestarts > 0}
+                            fallback={<span class="opacity-80">0</span>}
+                          >
+                            <span class={`badge badge-sm ${node.totalRestarts >= 10 ? 'badge-error' : 'badge-warning'}`}>
+                              {node.totalRestarts}
+                            </span>
+                          </Show>
+                        </td>
                         <td class="text-xs opacity-80">
                           {podIpLine}
                         </td>
@@ -225,13 +236,14 @@ const NodeTable = (props: NodeTableProps) => {
                       </tr>
                       <Show when={expanded() && node.pods.length > 0}>
                         <tr class="bg-base-300/20">
-                          <td colSpan={12} class="p-0">
+                          <td colSpan={13} class="p-0">
                             <div class="overflow-x-auto">
                               <table class="table table-xs w-full">
                                 <thead>
                                   <tr class="text-xs uppercase tracking-wide text-base-content/50">
                                     <th class="pl-10">Pod</th>
                                     <th>Namespace</th>
+                                    <th>Restarts</th>
                                     <th>CPU Requests</th>
                                     <th>CPU Usage</th>
                                     <th>Memory Requests</th>
@@ -244,6 +256,16 @@ const NodeTable = (props: NodeTableProps) => {
                                       <tr class="hover:bg-base-300/30">
                                         <td class="pl-10 font-mono text-xs">{pod.name}</td>
                                         <td class="text-xs opacity-80">{pod.namespace}</td>
+                                        <td class="text-xs">
+                                          <Show
+                                            when={pod.restartCount > 0}
+                                            fallback={<span class="opacity-80">0</span>}
+                                          >
+                                            <span class={pod.restartCount >= 10 ? 'text-error font-semibold' : 'text-warning'}>
+                                              {pod.restartCount}
+                                            </span>
+                                          </Show>
+                                        </td>
                                         <td class="text-xs opacity-80 font-mono">{pod.cpuRequests ?? '—'}</td>
                                         <td class="text-xs opacity-80 font-mono">{pod.cpuUsage ?? '—'}</td>
                                         <td class="text-xs opacity-80 font-mono">{pod.memoryRequests ?? '—'}</td>
@@ -259,7 +281,7 @@ const NodeTable = (props: NodeTableProps) => {
                       </Show>
                       <Show when={expanded() && node.blockers && node.blockers.length > 0}>
                         <tr class="bg-warning/10">
-                          <td colSpan={12} class="p-2 pl-10">
+                          <td colSpan={13} class="p-2 pl-10">
                             <div class="text-xs">
                               <span class="font-semibold uppercase tracking-wide">Blockers:</span>
                               <For each={node.blockers}>
