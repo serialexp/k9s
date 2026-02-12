@@ -1329,6 +1329,162 @@ export const apiPlugin: FastifyPluginAsync<ApiPluginOptions> = async (fastify, o
     return null;
   });
 
+  // VirtualService routes
+  fastify.get<{ Params: { namespace: string } }>('/namespaces/:namespace/virtualservices', async (request, reply) => {
+    const { namespace } = request.params;
+    if (!namespace) {
+      reply.code(400);
+      return { error: 'namespace is required' };
+    }
+    try {
+      const virtualservices = await kube.listVirtualServices(namespace);
+      return { items: virtualservices };
+    } catch (error) {
+      if (error instanceof CRDNotInstalledError) {
+        reply.code(503);
+        return { error: error.message };
+      }
+      const err = error as { statusCode?: number; body?: { message?: string }; message?: string };
+      if (err.statusCode === 401) {
+        reply.code(401);
+        return { error: err.body?.message || err.message || 'Authentication failed. Please check your Kubernetes credentials.' };
+      }
+      throw error;
+    }
+  });
+
+  fastify.get<{ Params: { namespace: string; virtualservice: string } }>('/namespaces/:namespace/virtualservices/:virtualservice', async (request, reply) => {
+    const { namespace, virtualservice } = request.params;
+    if (!namespace || !virtualservice) {
+      reply.code(400);
+      return { error: 'namespace and virtualservice are required' };
+    }
+    const detail = await kube.getVirtualService(namespace, virtualservice);
+    return detail;
+  });
+
+  fastify.get<{ Params: { namespace: string; virtualservice: string } }>('/namespaces/:namespace/virtualservices/:virtualservice/manifest', async (request, reply) => {
+    const { namespace, virtualservice } = request.params;
+    const manifest = await kube.getVirtualServiceManifest(namespace, virtualservice);
+    reply.header('content-type', 'application/yaml');
+    return yaml.stringify(JSON.parse(manifest));
+  });
+
+  fastify.delete<{ Params: { namespace: string; virtualservice: string } }>('/namespaces/:namespace/virtualservices/:virtualservice', async (request, reply) => {
+    const { namespace, virtualservice } = request.params;
+    if (!namespace || !virtualservice) {
+      reply.code(400);
+      return { error: 'namespace and virtualservice are required' };
+    }
+    await kube.deleteVirtualService(namespace, virtualservice);
+    reply.code(204);
+    return null;
+  });
+
+  // Gateway routes
+  fastify.get<{ Params: { namespace: string } }>('/namespaces/:namespace/gateways', async (request, reply) => {
+    const { namespace } = request.params;
+    if (!namespace) {
+      reply.code(400);
+      return { error: 'namespace is required' };
+    }
+    try {
+      const gateways = await kube.listGateways(namespace);
+      return { items: gateways };
+    } catch (error) {
+      if (error instanceof CRDNotInstalledError) {
+        reply.code(503);
+        return { error: error.message };
+      }
+      const err = error as { statusCode?: number; body?: { message?: string }; message?: string };
+      if (err.statusCode === 401) {
+        reply.code(401);
+        return { error: err.body?.message || err.message || 'Authentication failed. Please check your Kubernetes credentials.' };
+      }
+      throw error;
+    }
+  });
+
+  fastify.get<{ Params: { namespace: string; gateway: string } }>('/namespaces/:namespace/gateways/:gateway', async (request, reply) => {
+    const { namespace, gateway } = request.params;
+    if (!namespace || !gateway) {
+      reply.code(400);
+      return { error: 'namespace and gateway are required' };
+    }
+    const detail = await kube.getGateway(namespace, gateway);
+    return detail;
+  });
+
+  fastify.get<{ Params: { namespace: string; gateway: string } }>('/namespaces/:namespace/gateways/:gateway/manifest', async (request, reply) => {
+    const { namespace, gateway } = request.params;
+    const manifest = await kube.getGatewayManifest(namespace, gateway);
+    reply.header('content-type', 'application/yaml');
+    return yaml.stringify(JSON.parse(manifest));
+  });
+
+  fastify.delete<{ Params: { namespace: string; gateway: string } }>('/namespaces/:namespace/gateways/:gateway', async (request, reply) => {
+    const { namespace, gateway } = request.params;
+    if (!namespace || !gateway) {
+      reply.code(400);
+      return { error: 'namespace and gateway are required' };
+    }
+    await kube.deleteGateway(namespace, gateway);
+    reply.code(204);
+    return null;
+  });
+
+  // DestinationRule routes
+  fastify.get<{ Params: { namespace: string } }>('/namespaces/:namespace/destinationrules', async (request, reply) => {
+    const { namespace } = request.params;
+    if (!namespace) {
+      reply.code(400);
+      return { error: 'namespace is required' };
+    }
+    try {
+      const destinationrules = await kube.listDestinationRules(namespace);
+      return { items: destinationrules };
+    } catch (error) {
+      if (error instanceof CRDNotInstalledError) {
+        reply.code(503);
+        return { error: error.message };
+      }
+      const err = error as { statusCode?: number; body?: { message?: string }; message?: string };
+      if (err.statusCode === 401) {
+        reply.code(401);
+        return { error: err.body?.message || err.message || 'Authentication failed. Please check your Kubernetes credentials.' };
+      }
+      throw error;
+    }
+  });
+
+  fastify.get<{ Params: { namespace: string; destinationrule: string } }>('/namespaces/:namespace/destinationrules/:destinationrule', async (request, reply) => {
+    const { namespace, destinationrule } = request.params;
+    if (!namespace || !destinationrule) {
+      reply.code(400);
+      return { error: 'namespace and destinationrule are required' };
+    }
+    const detail = await kube.getDestinationRule(namespace, destinationrule);
+    return detail;
+  });
+
+  fastify.get<{ Params: { namespace: string; destinationrule: string } }>('/namespaces/:namespace/destinationrules/:destinationrule/manifest', async (request, reply) => {
+    const { namespace, destinationrule } = request.params;
+    const manifest = await kube.getDestinationRuleManifest(namespace, destinationrule);
+    reply.header('content-type', 'application/yaml');
+    return yaml.stringify(JSON.parse(manifest));
+  });
+
+  fastify.delete<{ Params: { namespace: string; destinationrule: string } }>('/namespaces/:namespace/destinationrules/:destinationrule', async (request, reply) => {
+    const { namespace, destinationrule } = request.params;
+    if (!namespace || !destinationrule) {
+      reply.code(400);
+      return { error: 'namespace and destinationrule are required' };
+    }
+    await kube.deleteDestinationRule(namespace, destinationrule);
+    reply.code(204);
+    return null;
+  });
+
   // SecretStore routes
   fastify.get<{ Params: { namespace: string } }>('/namespaces/:namespace/secretstores', async (request, reply) => {
     const { namespace } = request.params;

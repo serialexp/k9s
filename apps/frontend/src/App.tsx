@@ -34,6 +34,9 @@ import RoleListPage from './routes/RoleListPage';
 import ClusterRoleListPage from './routes/ClusterRoleListPage';
 import ArgoApplicationListPage from './routes/ArgoApplicationListPage';
 import RolloutListPage from './routes/RolloutListPage';
+import VirtualServiceListPage from './routes/VirtualServiceListPage';
+import GatewayListPage from './routes/GatewayListPage';
+import DestinationRuleListPage from './routes/DestinationRuleListPage';
 import ApplicationsPage from './routes/ApplicationsPage';
 
 const App = () => {
@@ -296,6 +299,51 @@ const App = () => {
           <Route path="/:context/:namespace/ingresses/:resourceName/:tab" component={() => (
             <LayoutWrapper>
               <IngressListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/virtualservices" component={() => (
+            <LayoutWrapper>
+              <VirtualServiceListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/virtualservices/:resourceName" component={() => (
+            <LayoutWrapper>
+              <VirtualServiceListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/virtualservices/:resourceName/:tab" component={() => (
+            <LayoutWrapper>
+              <VirtualServiceListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/gateways" component={() => (
+            <LayoutWrapper>
+              <GatewayListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/gateways/:resourceName" component={() => (
+            <LayoutWrapper>
+              <GatewayListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/gateways/:resourceName/:tab" component={() => (
+            <LayoutWrapper>
+              <GatewayListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/destinationrules" component={() => (
+            <LayoutWrapper>
+              <DestinationRuleListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/destinationrules/:resourceName" component={() => (
+            <LayoutWrapper>
+              <DestinationRuleListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/destinationrules/:resourceName/:tab" component={() => (
+            <LayoutWrapper>
+              <DestinationRuleListPage />
             </LayoutWrapper>
           )} />
 

@@ -1550,6 +1550,189 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
 
     return reply;
   });
+
+  fastify.get<{
+    Querystring: { namespace?: string };
+  }>('/virtualservices', async (request, reply) => {
+    const namespace = request.query.namespace ?? 'default';
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      Connection: 'keep-alive',
+      'Cache-Control': 'no-cache'
+    });
+
+    const send = (data: string) => {
+      reply.raw.write(`data: ${data}\n\n`);
+    };
+
+    const sendHeartbeat = () => {
+      reply.raw.write('event: heartbeat\n');
+      reply.raw.write(`data: {"ts": ${Date.now()} }\n\n`);
+    };
+
+    const heartbeatInterval = setInterval(sendHeartbeat, 25000);
+
+    const abortController = new AbortController();
+    const teardown = await kube
+      .streamVirtualServices(
+        namespace,
+        (chunk) => send(chunk),
+        (err) => {
+          const error = err as { statusCode?: number; body?: { message?: string }; message?: string };
+          fastify.log.error({ err }, 'virtualservice watch error');
+          reply.raw.write('event: error\n');
+          const errorMessage = error.statusCode === 401
+            ? 'Authentication failed. Please check your Kubernetes credentials.'
+            : error.statusCode === 404
+              ? (error.message ?? 'Istio VirtualService CRD not found in this cluster.')
+              : error.message ?? 'unknown error';
+          reply.raw.write(`data: ${JSON.stringify({ message: errorMessage, statusCode: error.statusCode })}\n\n`);
+        },
+        abortController.signal
+      )
+      .catch((error) => {
+        const err = error as { statusCode?: number; body?: { message?: string }; message?: string };
+        fastify.log.error({ error }, 'failed to start virtualservice watch');
+        reply.raw.write('event: error\n');
+        const errorMessage = err.statusCode === 401
+          ? 'Authentication failed. Please check your Kubernetes credentials.'
+          : err.statusCode === 404
+            ? (err.message ?? 'Istio VirtualService CRD not found in this cluster.')
+            : err.message ?? 'unknown error';
+        reply.raw.write(`data: ${JSON.stringify({ message: errorMessage, statusCode: err.statusCode })}\n\n`);
+        return () => undefined;
+      });
+
+    request.raw.on('close', () => {
+      clearInterval(heartbeatInterval);
+      abortController.abort();
+      teardown?.();
+    });
+
+    return reply;
+  });
+
+  fastify.get<{
+    Querystring: { namespace?: string };
+  }>('/gateways', async (request, reply) => {
+    const namespace = request.query.namespace ?? 'default';
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      Connection: 'keep-alive',
+      'Cache-Control': 'no-cache'
+    });
+
+    const send = (data: string) => {
+      reply.raw.write(`data: ${data}\n\n`);
+    };
+
+    const sendHeartbeat = () => {
+      reply.raw.write('event: heartbeat\n');
+      reply.raw.write(`data: {"ts": ${Date.now()} }\n\n`);
+    };
+
+    const heartbeatInterval = setInterval(sendHeartbeat, 25000);
+
+    const abortController = new AbortController();
+    const teardown = await kube
+      .streamGateways(
+        namespace,
+        (chunk) => send(chunk),
+        (err) => {
+          const error = err as { statusCode?: number; body?: { message?: string }; message?: string };
+          fastify.log.error({ err }, 'gateway watch error');
+          reply.raw.write('event: error\n');
+          const errorMessage = error.statusCode === 401
+            ? 'Authentication failed. Please check your Kubernetes credentials.'
+            : error.statusCode === 404
+              ? (error.message ?? 'Istio Gateway CRD not found in this cluster.')
+              : error.message ?? 'unknown error';
+          reply.raw.write(`data: ${JSON.stringify({ message: errorMessage, statusCode: error.statusCode })}\n\n`);
+        },
+        abortController.signal
+      )
+      .catch((error) => {
+        const err = error as { statusCode?: number; body?: { message?: string }; message?: string };
+        fastify.log.error({ error }, 'failed to start gateway watch');
+        reply.raw.write('event: error\n');
+        const errorMessage = err.statusCode === 401
+          ? 'Authentication failed. Please check your Kubernetes credentials.'
+          : err.statusCode === 404
+            ? (err.message ?? 'Istio Gateway CRD not found in this cluster.')
+            : err.message ?? 'unknown error';
+        reply.raw.write(`data: ${JSON.stringify({ message: errorMessage, statusCode: err.statusCode })}\n\n`);
+        return () => undefined;
+      });
+
+    request.raw.on('close', () => {
+      clearInterval(heartbeatInterval);
+      abortController.abort();
+      teardown?.();
+    });
+
+    return reply;
+  });
+
+  fastify.get<{
+    Querystring: { namespace?: string };
+  }>('/destinationrules', async (request, reply) => {
+    const namespace = request.query.namespace ?? 'default';
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      Connection: 'keep-alive',
+      'Cache-Control': 'no-cache'
+    });
+
+    const send = (data: string) => {
+      reply.raw.write(`data: ${data}\n\n`);
+    };
+
+    const sendHeartbeat = () => {
+      reply.raw.write('event: heartbeat\n');
+      reply.raw.write(`data: {"ts": ${Date.now()} }\n\n`);
+    };
+
+    const heartbeatInterval = setInterval(sendHeartbeat, 25000);
+
+    const abortController = new AbortController();
+    const teardown = await kube
+      .streamDestinationRules(
+        namespace,
+        (chunk) => send(chunk),
+        (err) => {
+          const error = err as { statusCode?: number; body?: { message?: string }; message?: string };
+          fastify.log.error({ err }, 'destinationrule watch error');
+          reply.raw.write('event: error\n');
+          const errorMessage = error.statusCode === 401
+            ? 'Authentication failed. Please check your Kubernetes credentials.'
+            : error.statusCode === 404
+              ? (error.message ?? 'Istio DestinationRule CRD not found in this cluster.')
+              : error.message ?? 'unknown error';
+          reply.raw.write(`data: ${JSON.stringify({ message: errorMessage, statusCode: error.statusCode })}\n\n`);
+        },
+        abortController.signal
+      )
+      .catch((error) => {
+        const err = error as { statusCode?: number; body?: { message?: string }; message?: string };
+        fastify.log.error({ error }, 'failed to start destinationrule watch');
+        reply.raw.write('event: error\n');
+        const errorMessage = err.statusCode === 401
+          ? 'Authentication failed. Please check your Kubernetes credentials.'
+          : err.statusCode === 404
+            ? (err.message ?? 'Istio DestinationRule CRD not found in this cluster.')
+            : err.message ?? 'unknown error';
+        reply.raw.write(`data: ${JSON.stringify({ message: errorMessage, statusCode: err.statusCode })}\n\n`);
+        return () => undefined;
+      });
+
+    request.raw.on('close', () => {
+      clearInterval(heartbeatInterval);
+      abortController.abort();
+      teardown?.();
+    });
+
+    return reply;
+  });
 };
 
 export default eventsPlugin;

@@ -976,6 +976,117 @@ export interface ExternalSecretWatchEvent {
   object: ExternalSecretListItem;
 }
 
+export interface VirtualServiceHttpRoute {
+  match?: Array<Record<string, unknown>>;
+  route?: Array<{
+    destination: {
+      host: string;
+      port?: { number: number };
+      subset?: string;
+    };
+    weight?: number;
+  }>;
+  redirect?: Record<string, unknown>;
+  rewrite?: Record<string, unknown>;
+  timeout?: string;
+  retries?: Record<string, unknown>;
+  fault?: Record<string, unknown>;
+  mirror?: Record<string, unknown>;
+  headers?: Record<string, unknown>;
+}
+
+export interface VirtualServiceListItem {
+  name: string;
+  namespace: string;
+  hosts: string[];
+  gateways: string[];
+  httpRouteCount: number;
+  tlsRouteCount: number;
+  tcpRouteCount: number;
+  creationTimestamp?: string;
+}
+
+export interface VirtualServiceDetail extends VirtualServiceListItem {
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  http: VirtualServiceHttpRoute[];
+  tls: Array<Record<string, unknown>>;
+  tcp: Array<Record<string, unknown>>;
+  exportTo: string[];
+}
+
+export interface VirtualServiceWatchEvent {
+  type: 'ADDED' | 'MODIFIED' | 'DELETED' | string;
+  object: VirtualServiceListItem;
+}
+
+export interface GatewayServer {
+  port: {
+    number: number;
+    name?: string;
+    protocol?: string;
+  };
+  hosts: string[];
+  tls?: Record<string, unknown>;
+}
+
+export interface GatewayListItem {
+  name: string;
+  namespace: string;
+  selector: Record<string, string>;
+  serverCount: number;
+  hosts: string[];
+  creationTimestamp?: string;
+}
+
+export interface GatewayDetail extends GatewayListItem {
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  servers: GatewayServer[];
+}
+
+export interface GatewayWatchEvent {
+  type: 'ADDED' | 'MODIFIED' | 'DELETED' | string;
+  object: GatewayListItem;
+}
+
+export interface DestinationRuleSubset {
+  name: string;
+  labels: Record<string, string>;
+  trafficPolicy?: Record<string, unknown>;
+}
+
+export interface DestinationRuleTrafficPolicy {
+  loadBalancer?: Record<string, unknown>;
+  connectionPool?: Record<string, unknown>;
+  outlierDetection?: Record<string, unknown>;
+  tls?: Record<string, unknown>;
+}
+
+export interface DestinationRuleListItem {
+  name: string;
+  namespace: string;
+  host: string;
+  subsetCount: number;
+  subsetNames: string[];
+  loadBalancer?: string;
+  tlsMode?: string;
+  creationTimestamp?: string;
+}
+
+export interface DestinationRuleDetail extends DestinationRuleListItem {
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  trafficPolicy?: DestinationRuleTrafficPolicy;
+  subsets: DestinationRuleSubset[];
+  exportTo: string[];
+}
+
+export interface DestinationRuleWatchEvent {
+  type: 'ADDED' | 'MODIFIED' | 'DELETED' | string;
+  object: DestinationRuleListItem;
+}
+
 export interface SecretStoreListItem {
   name: string;
   namespace: string;
@@ -2749,6 +2860,195 @@ export async function deleteExternalSecret(namespace: string, externalsecret: st
   await apiFetch<void>(`/namespaces/${encodeURIComponent(namespace)}/externalsecrets/${encodeURIComponent(externalsecret)}`, {
     method: 'DELETE'
   });
+}
+
+// VirtualService API functions
+export async function fetchVirtualServices(namespace: string): Promise<VirtualServiceListItem[]> {
+  const data = await apiFetch<{ items: VirtualServiceListItem[] }>(`/namespaces/${encodeURIComponent(namespace)}/virtualservices`);
+  return data.items;
+}
+
+export async function fetchVirtualService(namespace: string, name: string): Promise<VirtualServiceDetail> {
+  return apiFetch<VirtualServiceDetail>(`/namespaces/${encodeURIComponent(namespace)}/virtualservices/${encodeURIComponent(name)}`);
+}
+
+export async function fetchVirtualServiceManifest(namespace: string, name: string): Promise<string> {
+  const response = await fetch(
+    `${API_BASE}/namespaces/${encodeURIComponent(namespace)}/virtualservices/${encodeURIComponent(name)}/manifest`
+  );
+  if (!response.ok) {
+    const message = await response.text();
+    throw new ApiError(message || response.statusText, response.status);
+  }
+  return await response.text();
+}
+
+export async function deleteVirtualService(namespace: string, name: string): Promise<void> {
+  await apiFetch<void>(`/namespaces/${encodeURIComponent(namespace)}/virtualservices/${encodeURIComponent(name)}`, {
+    method: 'DELETE'
+  });
+}
+
+export function subscribeToVirtualServiceEvents(
+  namespace: string,
+  onEvent: (event: VirtualServiceWatchEvent) => void,
+  onError?: (error: ApiError) => void
+): () => void {
+  const eventSource = new EventSource(`${EVENTS_BASE}/virtualservices?namespace=${encodeURIComponent(namespace)}`);
+
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data) as VirtualServiceWatchEvent;
+      onEvent(data);
+    } catch (error) {
+      console.error('Failed to parse virtualservice watch event', error);
+    }
+  };
+
+  eventSource.onerror = (event) => {
+    if (eventSource.readyState === EventSource.CLOSED) {
+      try {
+        const apiError = new ApiError(
+          'VirtualService watch stream closed unexpectedly',
+          0
+        );
+        onError?.(apiError);
+      } catch {
+        console.error('VirtualService watch stream error', event);
+      }
+    }
+    eventSource.close();
+  };
+
+  return () => {
+    eventSource.close();
+  };
+}
+
+// Gateway API functions
+export async function fetchGateways(namespace: string): Promise<GatewayListItem[]> {
+  const data = await apiFetch<{ items: GatewayListItem[] }>(`/namespaces/${encodeURIComponent(namespace)}/gateways`);
+  return data.items;
+}
+
+export async function fetchGateway(namespace: string, name: string): Promise<GatewayDetail> {
+  return apiFetch<GatewayDetail>(`/namespaces/${encodeURIComponent(namespace)}/gateways/${encodeURIComponent(name)}`);
+}
+
+export async function fetchGatewayManifest(namespace: string, name: string): Promise<string> {
+  const response = await fetch(
+    `${API_BASE}/namespaces/${encodeURIComponent(namespace)}/gateways/${encodeURIComponent(name)}/manifest`
+  );
+  if (!response.ok) {
+    const message = await response.text();
+    throw new ApiError(message || response.statusText, response.status);
+  }
+  return await response.text();
+}
+
+export async function deleteGateway(namespace: string, name: string): Promise<void> {
+  await apiFetch<void>(`/namespaces/${encodeURIComponent(namespace)}/gateways/${encodeURIComponent(name)}`, {
+    method: 'DELETE'
+  });
+}
+
+export function subscribeToGatewayEvents(
+  namespace: string,
+  onEvent: (event: GatewayWatchEvent) => void,
+  onError?: (error: ApiError) => void
+): () => void {
+  const eventSource = new EventSource(`${EVENTS_BASE}/gateways?namespace=${encodeURIComponent(namespace)}`);
+
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data) as GatewayWatchEvent;
+      onEvent(data);
+    } catch (error) {
+      console.error('Failed to parse gateway watch event', error);
+    }
+  };
+
+  eventSource.onerror = (event) => {
+    if (eventSource.readyState === EventSource.CLOSED) {
+      try {
+        const apiError = new ApiError(
+          'Gateway watch stream closed unexpectedly',
+          0
+        );
+        onError?.(apiError);
+      } catch {
+        console.error('Gateway watch stream error', event);
+      }
+    }
+    eventSource.close();
+  };
+
+  return () => {
+    eventSource.close();
+  };
+}
+
+// DestinationRule API functions
+export async function fetchDestinationRules(namespace: string): Promise<DestinationRuleListItem[]> {
+  const data = await apiFetch<{ items: DestinationRuleListItem[] }>(`/namespaces/${encodeURIComponent(namespace)}/destinationrules`);
+  return data.items;
+}
+
+export async function fetchDestinationRule(namespace: string, name: string): Promise<DestinationRuleDetail> {
+  return apiFetch<DestinationRuleDetail>(`/namespaces/${encodeURIComponent(namespace)}/destinationrules/${encodeURIComponent(name)}`);
+}
+
+export async function fetchDestinationRuleManifest(namespace: string, name: string): Promise<string> {
+  const response = await fetch(
+    `${API_BASE}/namespaces/${encodeURIComponent(namespace)}/destinationrules/${encodeURIComponent(name)}/manifest`
+  );
+  if (!response.ok) {
+    const message = await response.text();
+    throw new ApiError(message || response.statusText, response.status);
+  }
+  return await response.text();
+}
+
+export async function deleteDestinationRule(namespace: string, name: string): Promise<void> {
+  await apiFetch<void>(`/namespaces/${encodeURIComponent(namespace)}/destinationrules/${encodeURIComponent(name)}`, {
+    method: 'DELETE'
+  });
+}
+
+export function subscribeToDestinationRuleEvents(
+  namespace: string,
+  onEvent: (event: DestinationRuleWatchEvent) => void,
+  onError?: (error: ApiError) => void
+): () => void {
+  const eventSource = new EventSource(`${EVENTS_BASE}/destinationrules?namespace=${encodeURIComponent(namespace)}`);
+
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data) as DestinationRuleWatchEvent;
+      onEvent(data);
+    } catch (error) {
+      console.error('Failed to parse destinationrule watch event', error);
+    }
+  };
+
+  eventSource.onerror = (event) => {
+    if (eventSource.readyState === EventSource.CLOSED) {
+      try {
+        const apiError = new ApiError(
+          'DestinationRule watch stream closed unexpectedly',
+          0
+        );
+        onError?.(apiError);
+      } catch {
+        console.error('DestinationRule watch stream error', event);
+      }
+    }
+    eventSource.close();
+  };
+
+  return () => {
+    eventSource.close();
+  };
 }
 
 // SecretStore API functions

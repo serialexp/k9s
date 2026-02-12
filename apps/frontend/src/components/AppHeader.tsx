@@ -57,6 +57,9 @@ const AppHeader = (props: AppHeaderProps) => {
     // Network
     { value: 'services', label: 'Services' },
     { value: 'ingresses', label: 'Ingresses' },
+    { value: 'virtualservices', label: 'VirtualServices' },
+    { value: 'gateways', label: 'Gateways' },
+    { value: 'destinationrules', label: 'DestinationRules' },
     // Config & Storage
     { value: 'configmaps', label: 'ConfigMaps' },
     { value: 'secrets', label: 'Secrets' },

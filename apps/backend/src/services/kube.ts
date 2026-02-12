@@ -12,6 +12,9 @@ import { SecretService } from "./resources/SecretService.js";
 import { HpaService } from "./resources/HpaService.js";
 import { PdbService } from "./resources/PdbService.js";
 import { PortForwardService } from "./resources/PortForwardService.js";
+import { VirtualServiceService } from "./resources/VirtualServiceService.js";
+import { GatewayService } from "./resources/GatewayService.js";
+import { DestinationRuleService } from "./resources/DestinationRuleService.js";
 import { CRDNotInstalledError } from "./base/errors.js";
 import {
 	AppsV1Api,
@@ -122,6 +125,25 @@ export type {
 	NamespaceListItem,
 	NamespaceWatchEvent,
 } from "./resources/NamespaceService.types.js";
+export type {
+	VirtualServiceDetail,
+	VirtualServiceHttpRoute,
+	VirtualServiceListItem,
+	VirtualServiceWatchEvent,
+} from "./resources/VirtualServiceService.types.js";
+export type {
+	GatewayDetail,
+	GatewayListItem,
+	GatewayServer,
+	GatewayWatchEvent,
+} from "./resources/GatewayService.types.js";
+export type {
+	DestinationRuleDetail,
+	DestinationRuleListItem,
+	DestinationRuleSubset,
+	DestinationRuleTrafficPolicy,
+	DestinationRuleWatchEvent,
+} from "./resources/DestinationRuleService.types.js";
 export { CRDNotInstalledError } from "./base/errors.js";
 
 const of = <T>(value: T) =>
@@ -1122,6 +1144,9 @@ export class KubeService {
 	private hpaService: HpaService;
 	private pdbService: PdbService;
 	private portForwardService: PortForwardService;
+	private virtualServiceService: VirtualServiceService;
+	private gatewayService: GatewayService;
+	private destinationRuleService: DestinationRuleService;
 
 	constructor() {
 		this.kubeConfig = new KubeConfig();
@@ -1149,6 +1174,9 @@ export class KubeService {
 		this.hpaService = new HpaService(this.kubeConfig);
 		this.pdbService = new PdbService(this.kubeConfig);
 		this.portForwardService = new PortForwardService(this.kubeConfig);
+		this.virtualServiceService = new VirtualServiceService(this.kubeConfig);
+		this.gatewayService = new GatewayService(this.kubeConfig);
+		this.destinationRuleService = new DestinationRuleService(this.kubeConfig);
 	}
 
 	refreshCredentials() {
@@ -1176,6 +1204,9 @@ export class KubeService {
 		this.hpaService.refreshCredentials();
 		this.pdbService.refreshCredentials();
 		this.portForwardService.refreshCredentials();
+		this.virtualServiceService.refreshCredentials();
+		this.gatewayService.refreshCredentials();
+		this.destinationRuleService.refreshCredentials();
 	}
 
 	private async withCredentialRetry<T>(fn: () => Promise<T>): Promise<T> {
@@ -1235,6 +1266,9 @@ export class KubeService {
 		this.pdbService.refreshCredentials();
 		this.portForwardService.stopAllForwards();
 		this.portForwardService.refreshCredentials();
+		this.virtualServiceService.refreshCredentials();
+		this.gatewayService.refreshCredentials();
+		this.destinationRuleService.refreshCredentials();
 	}
 
 	// Namespace methods - delegated to NamespaceService
@@ -8057,5 +8091,83 @@ export class KubeService {
 				message: condition.message,
 			})),
 		};
+	}
+
+	// VirtualService methods - delegated to VirtualServiceService
+	async listVirtualServices(namespace: string) {
+		return this.virtualServiceService.listVirtualServices(namespace);
+	}
+
+	async getVirtualService(namespace: string, name: string) {
+		return this.virtualServiceService.getVirtualService(namespace, name);
+	}
+
+	async getVirtualServiceManifest(namespace: string, name: string) {
+		return this.virtualServiceService.getVirtualServiceManifest(namespace, name);
+	}
+
+	async deleteVirtualService(namespace: string, name: string) {
+		return this.virtualServiceService.deleteVirtualService(namespace, name);
+	}
+
+	async streamVirtualServices(
+		namespace: string,
+		onData: (data: string) => void,
+		onError: (err: unknown) => void,
+		signal?: AbortSignal,
+	) {
+		return this.virtualServiceService.streamVirtualServices(namespace, onData, onError, signal);
+	}
+
+	// Gateway methods - delegated to GatewayService
+	async listGateways(namespace: string) {
+		return this.gatewayService.listGateways(namespace);
+	}
+
+	async getGateway(namespace: string, name: string) {
+		return this.gatewayService.getGateway(namespace, name);
+	}
+
+	async getGatewayManifest(namespace: string, name: string) {
+		return this.gatewayService.getGatewayManifest(namespace, name);
+	}
+
+	async deleteGateway(namespace: string, name: string) {
+		return this.gatewayService.deleteGateway(namespace, name);
+	}
+
+	async streamGateways(
+		namespace: string,
+		onData: (data: string) => void,
+		onError: (err: unknown) => void,
+		signal?: AbortSignal,
+	) {
+		return this.gatewayService.streamGateways(namespace, onData, onError, signal);
+	}
+
+	// DestinationRule methods - delegated to DestinationRuleService
+	async listDestinationRules(namespace: string) {
+		return this.destinationRuleService.listDestinationRules(namespace);
+	}
+
+	async getDestinationRule(namespace: string, name: string) {
+		return this.destinationRuleService.getDestinationRule(namespace, name);
+	}
+
+	async getDestinationRuleManifest(namespace: string, name: string) {
+		return this.destinationRuleService.getDestinationRuleManifest(namespace, name);
+	}
+
+	async deleteDestinationRule(namespace: string, name: string) {
+		return this.destinationRuleService.deleteDestinationRule(namespace, name);
+	}
+
+	async streamDestinationRules(
+		namespace: string,
+		onData: (data: string) => void,
+		onError: (err: unknown) => void,
+		signal?: AbortSignal,
+	) {
+		return this.destinationRuleService.streamDestinationRules(namespace, onData, onError, signal);
 	}
 }
