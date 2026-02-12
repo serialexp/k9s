@@ -911,6 +911,7 @@ export interface IngressListItem {
 export interface IngressDetail extends IngressListItem {
 	labels: Record<string, string>;
 	annotations: Record<string, string>;
+	finalizers: string[];
 	rules: Array<{
 		host?: string;
 		paths: Array<{
@@ -6258,6 +6259,50 @@ export class KubeService {
 		});
 	}
 
+	async forceDeleteIngress(
+		namespace: string,
+		ingressName: string,
+	): Promise<void> {
+		return this.withCredentialRetry(async () => {
+			function setHeaderMiddleware(
+				key: string,
+				value: string,
+			): ObservableMiddleware {
+				return {
+					pre: (request: RequestContext) => {
+						request.setHeaderParam(key, value);
+						return of(request);
+					},
+					post: (response: ResponseContext) => {
+						return of(response);
+					},
+				};
+			}
+
+			await this.networkingApi.patchNamespacedIngress(
+				{
+					name: ingressName,
+					namespace,
+					body: { metadata: { finalizers: null } },
+				},
+				{
+					middleware: [
+						setHeaderMiddleware(
+							"Content-Type",
+							"application/merge-patch+json",
+						),
+					],
+					middlewareMergeStrategy: "append",
+				},
+			);
+
+			await this.networkingApi.deleteNamespacedIngress({
+				name: ingressName,
+				namespace,
+			});
+		});
+	}
+
 	async streamIngresses(
 		namespace: string,
 		onData: (data: string) => void,
@@ -6362,6 +6407,7 @@ export class KubeService {
 			...listItem,
 			labels: ingress.metadata?.labels ?? {},
 			annotations: ingress.metadata?.annotations ?? {},
+			finalizers: ingress.metadata?.finalizers ?? [],
 			rules: (ingress.spec?.rules ?? []).map((rule) => ({
 				host: rule.host,
 				paths: (rule.http?.paths ?? []).map((path) => ({

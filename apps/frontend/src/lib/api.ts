@@ -750,6 +750,7 @@ export interface IngressListItem {
 export interface IngressDetail extends IngressListItem {
   labels: Record<string, string>;
   annotations: Record<string, string>;
+  finalizers: string[];
   rules: Array<{
     host?: string;
     paths: Array<{
@@ -3716,6 +3717,12 @@ export async function fetchIngressManifest(namespace: string, ingress: string): 
 
 export async function deleteIngress(namespace: string, ingress: string): Promise<void> {
   await apiFetch<void>(`/namespaces/${encodeURIComponent(namespace)}/ingresses/${encodeURIComponent(ingress)}`, {
+    method: 'DELETE'
+  });
+}
+
+export async function forceDeleteIngress(namespace: string, ingress: string): Promise<void> {
+  await apiFetch<void>(`/namespaces/${encodeURIComponent(namespace)}/ingresses/${encodeURIComponent(ingress)}?force=true`, {
     method: 'DELETE'
   });
 }

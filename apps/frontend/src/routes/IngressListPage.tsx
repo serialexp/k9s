@@ -7,6 +7,7 @@ import { contextStore } from '../stores/contextStore';
 import {
   ApiError,
   deleteIngress,
+  forceDeleteIngress,
   fetchIngress,
   fetchIngressManifest,
   fetchIngresses,
@@ -203,10 +204,28 @@ const IngressListPage = () => {
     }
   };
 
+  const handleForceDeleteIngress = async () => {
+    const rn = resourceName();
+    const ns = namespace();
+    if (!rn || !ns) return;
+
+    try {
+      await forceDeleteIngress(ns, rn);
+      navigate(`/${encodeURIComponent(context())}/${encodeURIComponent(ns)}/ingresses`);
+    } catch (error) {
+      console.error('Failed to force delete ingress', error);
+      if (error instanceof ApiError) {
+        setIngressesError(error.message);
+      } else {
+        setIngressesError('Failed to force delete ingress');
+      }
+    }
+  };
+
   const ingressActions = (): ResourceAction[] => {
     if (!resourceName()) return [];
 
-    return [
+    const actions: ResourceAction[] = [
       {
         label: 'Delete',
         variant: 'error',
@@ -218,6 +237,21 @@ const IngressListPage = () => {
         }
       }
     ];
+
+    if (ingressDetail()?.finalizers?.length) {
+      actions.push({
+        label: 'Force Delete',
+        variant: 'warning',
+        icon: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
+        onClick: handleForceDeleteIngress,
+        confirm: {
+          title: 'Force Delete Ingress',
+          message: `This will remove all finalizers and delete Ingress "${resourceName()}". Finalizer controllers will not run. Are you sure?`
+        }
+      });
+    }
+
+    return actions;
   };
 
   if (contextError()) {

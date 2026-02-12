@@ -2001,13 +2001,17 @@ export const apiPlugin: FastifyPluginAsync<ApiPluginOptions> = async (fastify, o
     return yaml.stringify(JSON.parse(manifest));
   });
 
-  fastify.delete<{ Params: { namespace: string; ingress: string } }>('/namespaces/:namespace/ingresses/:ingress', async (request, reply) => {
+  fastify.delete<{ Params: { namespace: string; ingress: string }; Querystring: { force?: string } }>('/namespaces/:namespace/ingresses/:ingress', async (request, reply) => {
     const { namespace, ingress } = request.params;
     if (!namespace || !ingress) {
       reply.code(400);
       return { error: 'namespace and ingress are required' };
     }
-    await kube.deleteIngress(namespace, ingress);
+    if (request.query.force === 'true') {
+      await kube.forceDeleteIngress(namespace, ingress);
+    } else {
+      await kube.deleteIngress(namespace, ingress);
+    }
     reply.code(204);
     return null;
   });
