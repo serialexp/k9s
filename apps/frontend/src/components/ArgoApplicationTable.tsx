@@ -1,4 +1,4 @@
-import { For, Show } from 'solid-js';
+import { createSignal, For, Show } from 'solid-js';
 import type { ArgoApplicationListItem } from '../lib/api';
 import { formatRelativeTime } from '../utils/datetime';
 
@@ -25,13 +25,34 @@ const statusBadgeClass = (status?: string) => {
   }
 };
 
-const ArgoApplicationTable = (props: ArgoApplicationTableProps) => (
+const ArgoApplicationTable = (props: ArgoApplicationTableProps) => {
+  const [search, setSearch] = createSignal('');
+  const filtered = () => {
+    const query = search().toLowerCase().trim();
+    if (!query) return props.applications;
+    return props.applications.filter((a) =>
+      a.name.toLowerCase().includes(query) ||
+      a.project?.toLowerCase().includes(query) ||
+      a.syncStatus?.toLowerCase().includes(query) ||
+      a.healthStatus?.toLowerCase().includes(query)
+    );
+  };
+  return (
   <div class="flex flex-col gap-3">
     <div class="flex items-center justify-between">
       <h2 class="text-lg font-semibold">Argo CD Applications</h2>
-      <Show when={props.loading}>
-        <span class="loading loading-xs loading-spinner" />
-      </Show>
+      <div class="flex items-center gap-2">
+        <input
+          type="text"
+          placeholder="Filter by name, project, or status..."
+          class="input input-bordered input-sm w-64"
+          value={search()}
+          onInput={(e) => setSearch(e.currentTarget.value)}
+        />
+        <Show when={props.loading}>
+          <span class="loading loading-xs loading-spinner" />
+        </Show>
+      </div>
     </div>
     <div class="overflow-x-auto rounded-lg border border-base-200/50 bg-base-200/30">
       <table class="table table-zebra table-pin-rows">
@@ -48,16 +69,16 @@ const ArgoApplicationTable = (props: ArgoApplicationTableProps) => (
         </thead>
         <tbody>
           <Show
-            when={props.applications.length}
+            when={filtered().length}
             fallback={
               <tr>
                 <td colSpan={7} class="text-center text-sm opacity-70">
-                  No Argo CD applications in this namespace.
+                  {search() ? 'No applications match the filter.' : 'No Argo CD applications in this namespace.'}
                 </td>
               </tr>
             }
           >
-            <For each={props.applications}>
+            <For each={filtered()}>
               {(application) => (
                 <tr
                   class={`cursor-pointer hover:bg-base-200/50 ${props.selectedApplication === application.name ? 'bg-primary/20 border-l-4 border-primary' : ''}`}
@@ -91,6 +112,7 @@ const ArgoApplicationTable = (props: ArgoApplicationTableProps) => (
       </table>
     </div>
   </div>
-);
+  );
+};
 
 export default ArgoApplicationTable;

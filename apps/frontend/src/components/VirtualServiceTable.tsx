@@ -1,6 +1,6 @@
 // ABOUTME: Displays a table of Istio VirtualServices with routing summary
 // ABOUTME: Supports selection highlighting and click handlers
-import { For, Show } from 'solid-js';
+import { createSignal, For, Show } from 'solid-js';
 import type { VirtualServiceListItem } from '../lib/api';
 import { formatRelativeTime } from '../utils/datetime';
 
@@ -11,13 +11,32 @@ interface VirtualServiceTableProps {
   onSelect?: (virtualservice: VirtualServiceListItem) => void;
 }
 
-const VirtualServiceTable = (props: VirtualServiceTableProps) => (
+const VirtualServiceTable = (props: VirtualServiceTableProps) => {
+  const [search, setSearch] = createSignal('');
+  const filtered = () => {
+    const query = search().toLowerCase().trim();
+    if (!query) return props.virtualservices;
+    return props.virtualservices.filter((vs) =>
+      vs.name.toLowerCase().includes(query) ||
+      vs.hosts.some((h) => h.toLowerCase().includes(query))
+    );
+  };
+  return (
   <div class="flex flex-col gap-3">
     <div class="flex items-center justify-between">
       <h2 class="text-lg font-semibold">VirtualServices</h2>
-      <Show when={props.loading}>
-        <span class="loading loading-xs loading-spinner" />
-      </Show>
+      <div class="flex items-center gap-2">
+        <input
+          type="text"
+          placeholder="Filter by name or host..."
+          class="input input-bordered input-sm w-64"
+          value={search()}
+          onInput={(e) => setSearch(e.currentTarget.value)}
+        />
+        <Show when={props.loading}>
+          <span class="loading loading-xs loading-spinner" />
+        </Show>
+      </div>
     </div>
     <div class="overflow-x-auto rounded-lg border border-base-200/50 bg-base-200/30">
       <table class="table table-zebra table-pin-rows">
@@ -32,16 +51,16 @@ const VirtualServiceTable = (props: VirtualServiceTableProps) => (
         </thead>
         <tbody>
           <Show
-            when={props.virtualservices.length}
+            when={filtered().length}
             fallback={
               <tr>
                 <td colSpan={5} class="text-center text-sm opacity-70">
-                  No VirtualServices in this namespace.
+                  {search() ? 'No VirtualServices match the filter.' : 'No VirtualServices in this namespace.'}
                 </td>
               </tr>
             }
           >
-            <For each={props.virtualservices}>
+            <For each={filtered()}>
               {(vs) => (
                 <tr
                   class={`cursor-pointer hover:bg-base-200/50 ${props.selectedVirtualService === vs.name ? 'bg-primary/20 border-l-4 border-primary' : ''}`}
@@ -60,6 +79,7 @@ const VirtualServiceTable = (props: VirtualServiceTableProps) => (
       </table>
     </div>
   </div>
-);
+  );
+};
 
 export default VirtualServiceTable;

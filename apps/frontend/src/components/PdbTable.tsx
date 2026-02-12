@@ -1,6 +1,6 @@
 // ABOUTME: Displays a table of Kubernetes PodDisruptionBudgets with health metrics
 // ABOUTME: Supports selection highlighting and click handlers
-import { For, Show } from 'solid-js';
+import { createSignal, For, Show } from 'solid-js';
 import type { PdbListItem } from '../lib/api';
 import { formatRelativeTime } from '../utils/datetime';
 
@@ -11,13 +11,31 @@ interface PdbTableProps {
   onSelect?: (pdb: PdbListItem) => void;
 }
 
-const PdbTable = (props: PdbTableProps) => (
+const PdbTable = (props: PdbTableProps) => {
+  const [search, setSearch] = createSignal('');
+  const filtered = () => {
+    const query = search().toLowerCase().trim();
+    if (!query) return props.pdbs;
+    return props.pdbs.filter((p) =>
+      p.name.toLowerCase().includes(query)
+    );
+  };
+  return (
   <div class="flex flex-col gap-3">
     <div class="flex items-center justify-between">
       <h2 class="text-lg font-semibold">PodDisruptionBudgets</h2>
-      <Show when={props.loading}>
-        <span class="loading loading-xs loading-spinner" />
-      </Show>
+      <div class="flex items-center gap-2">
+        <input
+          type="text"
+          placeholder="Filter by name..."
+          class="input input-bordered input-sm w-64"
+          value={search()}
+          onInput={(e) => setSearch(e.currentTarget.value)}
+        />
+        <Show when={props.loading}>
+          <span class="loading loading-xs loading-spinner" />
+        </Show>
+      </div>
     </div>
     <div class="overflow-x-auto rounded-lg border border-base-200/50 bg-base-200/30">
       <table class="table table-zebra table-pin-rows">
@@ -32,16 +50,16 @@ const PdbTable = (props: PdbTableProps) => (
         </thead>
         <tbody>
           <Show
-            when={props.pdbs.length}
+            when={filtered().length}
             fallback={
               <tr>
                 <td colSpan={5} class="text-center text-sm opacity-70">
-                  No PodDisruptionBudgets in this namespace.
+                  {search() ? 'No PodDisruptionBudgets match the filter.' : 'No PodDisruptionBudgets in this namespace.'}
                 </td>
               </tr>
             }
           >
-            <For each={props.pdbs}>
+            <For each={filtered()}>
               {(pdb) => (
                 <tr
                   class={`cursor-pointer hover:bg-base-200/50 ${props.selectedPdb === pdb.name ? 'bg-primary/20 border-l-4 border-primary' : ''}`}
@@ -72,6 +90,7 @@ const PdbTable = (props: PdbTableProps) => (
       </table>
     </div>
   </div>
-);
+  );
+};
 
 export default PdbTable;

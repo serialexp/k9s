@@ -1,6 +1,6 @@
 // ABOUTME: Displays a table of Kubernetes Roles with rule counts and metadata
 // ABOUTME: Supports selection highlighting and click handlers
-import { For, Show } from 'solid-js';
+import { createSignal, For, Show } from 'solid-js';
 import type { RoleListItem } from '../lib/api';
 import { formatRelativeTime } from '../utils/datetime';
 
@@ -11,13 +11,31 @@ interface RoleTableProps {
   onSelect?: (role: RoleListItem) => void;
 }
 
-const RoleTable = (props: RoleTableProps) => (
+const RoleTable = (props: RoleTableProps) => {
+  const [search, setSearch] = createSignal('');
+  const filtered = () => {
+    const query = search().toLowerCase().trim();
+    if (!query) return props.roles;
+    return props.roles.filter((r) =>
+      r.name.toLowerCase().includes(query)
+    );
+  };
+  return (
   <div class="flex flex-col gap-3">
     <div class="flex items-center justify-between">
       <h2 class="text-lg font-semibold">Roles</h2>
-      <Show when={props.loading}>
-        <span class="loading loading-xs loading-spinner" />
-      </Show>
+      <div class="flex items-center gap-2">
+        <input
+          type="text"
+          placeholder="Filter by name..."
+          class="input input-bordered input-sm w-64"
+          value={search()}
+          onInput={(e) => setSearch(e.currentTarget.value)}
+        />
+        <Show when={props.loading}>
+          <span class="loading loading-xs loading-spinner" />
+        </Show>
+      </div>
     </div>
     <div class="overflow-x-auto rounded-lg border border-base-200/50 bg-base-200/30">
       <table class="table table-zebra table-pin-rows">
@@ -30,16 +48,16 @@ const RoleTable = (props: RoleTableProps) => (
         </thead>
         <tbody>
           <Show
-            when={props.roles.length}
+            when={filtered().length}
             fallback={
               <tr>
                 <td colSpan={3} class="text-center text-sm opacity-70">
-                  No Roles in this namespace.
+                  {search() ? 'No Roles match the filter.' : 'No Roles in this namespace.'}
                 </td>
               </tr>
             }
           >
-            <For each={props.roles}>
+            <For each={filtered()}>
               {(role) => (
                 <tr
                   class={`cursor-pointer hover:bg-base-200/50 ${props.selectedRole === role.name ? 'bg-primary/20 border-l-4 border-primary' : ''}`}
@@ -56,6 +74,7 @@ const RoleTable = (props: RoleTableProps) => (
       </table>
     </div>
   </div>
-);
+  );
+};
 
 export default RoleTable;

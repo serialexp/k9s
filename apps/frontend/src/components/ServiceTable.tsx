@@ -1,6 +1,6 @@
 // ABOUTME: Displays a table of Kubernetes services with their type, IPs, and ports
 // ABOUTME: Supports selection highlighting and click handlers
-import { For, Show } from 'solid-js';
+import { createSignal, For, Show } from 'solid-js';
 import type { ServiceListItem } from '../lib/api';
 import { formatRelativeTime } from '../utils/datetime';
 
@@ -26,13 +26,34 @@ const typeBadgeClass = (type: string) => {
   }
 };
 
-const ServiceTable = (props: ServiceTableProps) => (
+const ServiceTable = (props: ServiceTableProps) => {
+  const [search, setSearch] = createSignal('');
+  const filtered = () => {
+    const query = search().toLowerCase().trim();
+    if (!query) return props.services;
+    return props.services.filter((s) =>
+      s.name.toLowerCase().includes(query) ||
+      s.type.toLowerCase().includes(query) ||
+      s.clusterIP?.includes(query) ||
+      s.externalIP?.toLowerCase().includes(query)
+    );
+  };
+  return (
   <div class="flex flex-col gap-3">
     <div class="flex items-center justify-between">
       <h2 class="text-lg font-semibold">Services</h2>
-      <Show when={props.loading}>
-        <span class="loading loading-xs loading-spinner" />
-      </Show>
+      <div class="flex items-center gap-2">
+        <input
+          type="text"
+          placeholder="Filter by name, type, or IP..."
+          class="input input-bordered input-sm w-64"
+          value={search()}
+          onInput={(e) => setSearch(e.currentTarget.value)}
+        />
+        <Show when={props.loading}>
+          <span class="loading loading-xs loading-spinner" />
+        </Show>
+      </div>
     </div>
     <div class="overflow-x-auto rounded-lg border border-base-200/50 bg-base-200/30">
       <table class="table table-zebra table-pin-rows">
@@ -48,16 +69,16 @@ const ServiceTable = (props: ServiceTableProps) => (
         </thead>
         <tbody>
           <Show
-            when={props.services.length}
+            when={filtered().length}
             fallback={
               <tr>
                 <td colSpan={6} class="text-center text-sm opacity-70">
-                  No services in this namespace.
+                  {search() ? 'No services match the filter.' : 'No services in this namespace.'}
                 </td>
               </tr>
             }
           >
-            <For each={props.services}>
+            <For each={filtered()}>
               {(service) => (
                 <tr
                   class={`cursor-pointer hover:bg-base-200/50 ${props.selectedService === service.name ? 'bg-primary/20 border-l-4 border-primary' : ''}`}
@@ -86,6 +107,7 @@ const ServiceTable = (props: ServiceTableProps) => (
       </table>
     </div>
   </div>
-);
+  );
+};
 
 export default ServiceTable;

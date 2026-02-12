@@ -1,4 +1,4 @@
-import { For, Show } from 'solid-js';
+import { createSignal, For, Show } from 'solid-js';
 import type { RolloutListItem } from '../lib/api';
 import { formatRelativeTime } from '../utils/datetime';
 
@@ -37,13 +37,33 @@ const getPhaseBadgeClass = (phase?: string) => {
   }
 };
 
-const RolloutTable = (props: RolloutTableProps) => (
+const RolloutTable = (props: RolloutTableProps) => {
+  const [search, setSearch] = createSignal('');
+  const filtered = () => {
+    const query = search().toLowerCase().trim();
+    if (!query) return props.rollouts;
+    return props.rollouts.filter((r) =>
+      r.name.toLowerCase().includes(query) ||
+      r.strategy?.toLowerCase().includes(query) ||
+      r.phase?.toLowerCase().includes(query)
+    );
+  };
+  return (
   <div class="flex flex-col gap-3">
     <div class="flex items-center justify-between">
       <h2 class="text-lg font-semibold">Argo Rollouts</h2>
-      <Show when={props.loading}>
-        <span class="loading loading-xs loading-spinner" />
-      </Show>
+      <div class="flex items-center gap-2">
+        <input
+          type="text"
+          placeholder="Filter by name, strategy, or phase..."
+          class="input input-bordered input-sm w-64"
+          value={search()}
+          onInput={(e) => setSearch(e.currentTarget.value)}
+        />
+        <Show when={props.loading}>
+          <span class="loading loading-xs loading-spinner" />
+        </Show>
+      </div>
     </div>
     <div class="overflow-x-auto rounded-lg border border-base-200/50 bg-base-200/30">
       <table class="table table-zebra table-pin-rows">
@@ -59,16 +79,16 @@ const RolloutTable = (props: RolloutTableProps) => (
         </thead>
         <tbody>
           <Show
-            when={props.rollouts.length}
+            when={filtered().length}
             fallback={
               <tr>
                 <td colSpan={6} class="text-center text-sm opacity-70">
-                  No rollouts in this namespace.
+                  {search() ? 'No rollouts match the filter.' : 'No rollouts in this namespace.'}
                 </td>
               </tr>
             }
           >
-            <For each={props.rollouts}>
+            <For each={filtered()}>
               {(rollout) => (
                 <tr
                   class={`cursor-pointer hover:bg-base-200/50 ${props.selectedRollout === rollout.name ? 'bg-primary/20 border-l-4 border-primary' : ''}`}
@@ -96,6 +116,7 @@ const RolloutTable = (props: RolloutTableProps) => (
       </table>
     </div>
   </div>
-);
+  );
+};
 
 export default RolloutTable;

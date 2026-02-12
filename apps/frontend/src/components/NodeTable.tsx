@@ -37,6 +37,7 @@ const formatPodLine = (primary?: number, secondary?: number) => {
 };
 
 const NodeTable = (props: NodeTableProps) => {
+  const [search, setSearch] = createSignal('');
   const [expandedNodes, setExpandedNodes] = createSignal<Set<string>>(new Set());
 
   const toggleNode = (nodeName: string) => {
@@ -53,13 +54,32 @@ const NodeTable = (props: NodeTableProps) => {
 
   const isExpanded = (nodeName: string) => expandedNodes().has(nodeName);
 
+  const filtered = () => {
+    const query = search().toLowerCase().trim();
+    if (!query) return props.nodes;
+    return props.nodes.filter((n) =>
+      n.name.toLowerCase().includes(query) ||
+      n.nodePool?.toLowerCase().includes(query) ||
+      n.internalIP?.includes(query)
+    );
+  };
+
   return (
     <div class="flex flex-col gap-3">
       <div class="flex items-center justify-between">
         <h2 class="text-lg font-semibold">Nodes</h2>
-        <Show when={props.loading}>
-          <span class="loading loading-xs loading-spinner" />
-        </Show>
+        <div class="flex items-center gap-2">
+          <input
+            type="text"
+            placeholder="Filter by name, pool, or IP..."
+            class="input input-bordered input-sm w-64"
+            value={search()}
+            onInput={(e) => setSearch(e.currentTarget.value)}
+          />
+          <Show when={props.loading}>
+            <span class="loading loading-xs loading-spinner" />
+          </Show>
+        </div>
       </div>
       <div class="overflow-x-auto rounded-lg border border-base-200/50 bg-base-200/30">
         <table class="table table-zebra table-pin-rows">
@@ -82,16 +102,16 @@ const NodeTable = (props: NodeTableProps) => {
           </thead>
           <tbody>
             <Show
-              when={props.nodes.length}
+              when={filtered().length}
               fallback={
                 <tr>
                   <td colSpan={13} class="text-center text-sm opacity-70">
-                    No nodes available.
+                    {search() ? 'No nodes match the filter.' : 'No nodes available.'}
                   </td>
                 </tr>
               }
             >
-              <For each={props.nodes}>
+              <For each={filtered()}>
                 {(node) => {
                   const cpuUsageLine = formatPair(formatCpuQuantity(node.cpuUsage), formatCpuQuantity(node.cpuCapacity));
                   const cpuAllocLine = formatPair(formatCpuQuantity(node.cpuAllocatable), formatCpuQuantity(node.cpuCapacity));

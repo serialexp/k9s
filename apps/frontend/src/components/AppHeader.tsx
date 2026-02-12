@@ -43,42 +43,65 @@ const AppHeader = (props: AppHeaderProps) => {
   const currentContext = () => props.currentContext || contextStore.selectedContext();
   const currentNamespace = () => props.currentNamespace || contextStore.selectedNamespace();
 
-  // Available resource types
-  const resourceTypes = [
-    // Workloads
-    { value: 'pods', label: 'Pods' },
-    { value: 'deployments', label: 'Deployments' },
-    { value: 'rollouts', label: 'Rollouts' },
-    { value: 'applications', label: 'Argo Apps' },
-    { value: 'statefulsets', label: 'StatefulSets' },
-    { value: 'daemonsets', label: 'DaemonSets' },
-    { value: 'jobs', label: 'Jobs' },
-    { value: 'cronjobs', label: 'CronJobs' },
-    // Network
-    { value: 'services', label: 'Services' },
-    { value: 'ingresses', label: 'Ingresses' },
-    { value: 'virtualservices', label: 'VirtualServices' },
-    { value: 'gateways', label: 'Gateways' },
-    { value: 'destinationrules', label: 'DestinationRules' },
-    // Config & Storage
-    { value: 'configmaps', label: 'ConfigMaps' },
-    { value: 'secrets', label: 'Secrets' },
-    { value: 'externalsecrets', label: 'External Secrets' },
-    { value: 'secretstores', label: 'Secret Stores' },
-    { value: 'crds', label: 'CRDs' },
-    { value: 'persistentvolumeclaims', label: 'PVCs' },
-    { value: 'storageclasses', label: 'StorageClasses' },
-    // Access Control
-    { value: 'serviceaccounts', label: 'ServiceAccounts' },
-    { value: 'roles', label: 'Roles' },
-    { value: 'clusterroles', label: 'ClusterRoles' },
-    // Autoscaling
-    { value: 'scaledobjects', label: 'ScaledObjects' },
-    { value: 'hpas', label: 'HPAs' },
-    { value: 'pdbs', label: 'PDBs' },
-    // Cluster
-    { value: 'nodeclasses', label: 'NodeClasses' },
-    { value: 'nodepools', label: 'NodePools' },
+  const resourceGroups = [
+    {
+      label: 'core',
+      resources: [
+        { value: 'pods', label: 'Pods' },
+        { value: 'deployments', label: 'Deployments' },
+        { value: 'statefulsets', label: 'StatefulSets' },
+        { value: 'daemonsets', label: 'DaemonSets' },
+        { value: 'jobs', label: 'Jobs' },
+        { value: 'cronjobs', label: 'CronJobs' },
+        { value: 'services', label: 'Services' },
+        { value: 'ingresses', label: 'Ingresses' },
+        { value: 'configmaps', label: 'ConfigMaps' },
+        { value: 'secrets', label: 'Secrets' },
+        { value: 'crds', label: 'CRDs', title: 'CustomResourceDefinitions' },
+        { value: 'persistentvolumeclaims', label: 'PVCs', title: 'PersistentVolumeClaims' },
+        { value: 'storageclasses', label: 'StorageClasses' },
+        { value: 'serviceaccounts', label: 'ServiceAccounts' },
+        { value: 'roles', label: 'Roles' },
+        { value: 'clusterroles', label: 'ClusterRoles' },
+        { value: 'hpas', label: 'HPAs', title: 'HorizontalPodAutoscalers' },
+        { value: 'pdbs', label: 'PDBs', title: 'PodDisruptionBudgets' },
+      ],
+    },
+    {
+      label: 'argo',
+      resources: [
+        { value: 'rollouts', label: 'Rollouts' },
+        { value: 'applications', label: 'Apps', title: 'Argo Applications' },
+      ],
+    },
+    {
+      label: 'istio',
+      resources: [
+        { value: 'virtualservices', label: 'VirtualServices' },
+        { value: 'gateways', label: 'Gateways' },
+        { value: 'destinationrules', label: 'DestinationRules' },
+      ],
+    },
+    {
+      label: 'ext-secrets',
+      resources: [
+        { value: 'externalsecrets', label: 'External Secrets' },
+        { value: 'secretstores', label: 'Secret Stores' },
+      ],
+    },
+    {
+      label: 'keda',
+      resources: [
+        { value: 'scaledobjects', label: 'ScaledObjects' },
+      ],
+    },
+    {
+      label: 'karpenter',
+      resources: [
+        { value: 'nodeclasses', label: 'NodeClasses' },
+        { value: 'nodepools', label: 'NodePools' },
+      ],
+    },
   ];
 
   return (
@@ -205,21 +228,26 @@ const AppHeader = (props: AppHeaderProps) => {
             </button>
           </div>
         </div>
-        <div class="flex items-center">
-          <span class="text-sm opacity-70 mr-2">Resource:</span>
-          <div class="flex flex-wrap gap-1">
-            <For each={resourceTypes}>
-              {(resourceType) => (
-                <button
-                  type="button"
-                  class={`btn btn-xs ${props.currentResourceType === resourceType.value ? 'btn-primary' : 'btn-ghost'}`}
-                  onClick={() => handleResourceTypeChange(resourceType.value)}
-                >
-                  {resourceType.label}
-                </button>
-              )}
-            </For>
-          </div>
+        <div class="flex flex-wrap gap-1 items-center">
+          <For each={resourceGroups}>
+            {(group) => (
+              <div class="flex items-center gap-1">
+                <span class="text-[0.6rem] uppercase opacity-40">{group.label}</span>
+                <For each={group.resources}>
+                  {(resourceType) => (
+                    <button
+                      type="button"
+                      class={`btn btn-xs ${props.currentResourceType === resourceType.value ? 'btn-primary' : 'btn-ghost'}`}
+                      onClick={() => handleResourceTypeChange(resourceType.value)}
+                      title={resourceType.title}
+                    >
+                      {resourceType.label}
+                    </button>
+                  )}
+                </For>
+              </div>
+            )}
+          </For>
         </div>
       </div>
       <PortForwardModal />

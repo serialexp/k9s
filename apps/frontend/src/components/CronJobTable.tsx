@@ -1,6 +1,6 @@
 // ABOUTME: Displays a table of Kubernetes CronJobs with schedule and status information
 // ABOUTME: Supports selection highlighting and click handlers
-import { For, Show } from 'solid-js';
+import { createSignal, For, Show } from 'solid-js';
 import type { CronJobListItem } from '../lib/api';
 import { formatRelativeTime } from '../utils/datetime';
 
@@ -11,13 +11,32 @@ interface CronJobTableProps {
   onSelect?: (cronjob: CronJobListItem) => void;
 }
 
-const CronJobTable = (props: CronJobTableProps) => (
+const CronJobTable = (props: CronJobTableProps) => {
+  const [search, setSearch] = createSignal('');
+  const filtered = () => {
+    const query = search().toLowerCase().trim();
+    if (!query) return props.cronjobs;
+    return props.cronjobs.filter((c) =>
+      c.name.toLowerCase().includes(query) ||
+      c.schedule?.toLowerCase().includes(query)
+    );
+  };
+  return (
   <div class="flex flex-col gap-3">
     <div class="flex items-center justify-between">
       <h2 class="text-lg font-semibold">CronJobs</h2>
-      <Show when={props.loading}>
-        <span class="loading loading-xs loading-spinner" />
-      </Show>
+      <div class="flex items-center gap-2">
+        <input
+          type="text"
+          placeholder="Filter by name or schedule..."
+          class="input input-bordered input-sm w-64"
+          value={search()}
+          onInput={(e) => setSearch(e.currentTarget.value)}
+        />
+        <Show when={props.loading}>
+          <span class="loading loading-xs loading-spinner" />
+        </Show>
+      </div>
     </div>
     <div class="overflow-x-auto rounded-lg border border-base-200/50 bg-base-200/30">
       <table class="table table-zebra table-pin-rows">
@@ -34,16 +53,16 @@ const CronJobTable = (props: CronJobTableProps) => (
         </thead>
         <tbody>
           <Show
-            when={props.cronjobs.length}
+            when={filtered().length}
             fallback={
               <tr>
                 <td colSpan={7} class="text-center text-sm opacity-70">
-                  No CronJobs in this namespace.
+                  {search() ? 'No CronJobs match the filter.' : 'No CronJobs in this namespace.'}
                 </td>
               </tr>
             }
           >
-            <For each={props.cronjobs}>
+            <For each={filtered()}>
               {(cronjob) => (
                 <tr
                   class={`cursor-pointer hover:bg-base-200/50 ${props.selectedCronJob === cronjob.name ? 'bg-primary/20 border-l-4 border-primary' : ''}`}
@@ -68,6 +87,7 @@ const CronJobTable = (props: CronJobTableProps) => (
       </table>
     </div>
   </div>
-);
+  );
+};
 
 export default CronJobTable;

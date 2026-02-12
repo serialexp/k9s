@@ -1,4 +1,4 @@
-import { For, Show } from 'solid-js';
+import { createSignal, For, Show } from 'solid-js';
 import type { SecretStoreListItem } from '../lib/api';
 import { formatRelativeTime } from '../utils/datetime';
 
@@ -20,13 +20,32 @@ const getReadyBadgeClass = (status?: string) => {
   }
 };
 
-const SecretStoreTable = (props: SecretStoreTableProps) => (
+const SecretStoreTable = (props: SecretStoreTableProps) => {
+  const [search, setSearch] = createSignal('');
+  const filtered = () => {
+    const query = search().toLowerCase().trim();
+    if (!query) return props.secretstores;
+    return props.secretstores.filter((ss) =>
+      ss.name.toLowerCase().includes(query) ||
+      ss.providerType?.toLowerCase().includes(query)
+    );
+  };
+  return (
   <div class="flex flex-col gap-3">
     <div class="flex items-center justify-between">
       <h2 class="text-lg font-semibold">Secret Stores</h2>
-      <Show when={props.loading}>
-        <span class="loading loading-xs loading-spinner" />
-      </Show>
+      <div class="flex items-center gap-2">
+        <input
+          type="text"
+          placeholder="Filter by name or provider..."
+          class="input input-bordered input-sm w-64"
+          value={search()}
+          onInput={(e) => setSearch(e.currentTarget.value)}
+        />
+        <Show when={props.loading}>
+          <span class="loading loading-xs loading-spinner" />
+        </Show>
+      </div>
     </div>
     <div class="overflow-x-auto rounded-lg border border-base-200/50 bg-base-200/30">
       <table class="table table-zebra table-pin-rows">
@@ -41,16 +60,16 @@ const SecretStoreTable = (props: SecretStoreTableProps) => (
         </thead>
         <tbody>
           <Show
-            when={props.secretstores.length}
+            when={filtered().length}
             fallback={
               <tr>
                 <td colSpan={5} class="text-center text-sm opacity-70">
-                  No secret stores in this namespace.
+                  {search() ? 'No secret stores match the filter.' : 'No secret stores in this namespace.'}
                 </td>
               </tr>
             }
           >
-            <For each={props.secretstores}>
+            <For each={filtered()}>
               {(secretstore) => (
                 <tr
                   class={`cursor-pointer hover:bg-base-200/50 ${props.selectedSecretStore === secretstore.name ? 'bg-primary/20 border-l-4 border-primary' : ''}`}
@@ -75,6 +94,7 @@ const SecretStoreTable = (props: SecretStoreTableProps) => (
       </table>
     </div>
   </div>
-);
+  );
+};
 
 export default SecretStoreTable;

@@ -1,6 +1,6 @@
 // ABOUTME: Displays a table of Kubernetes Secrets with type and key counts
 // ABOUTME: Supports selection highlighting and click handlers
-import { For, Show } from 'solid-js';
+import { createSignal, For, Show } from 'solid-js';
 import type { SecretListItem } from '../lib/api';
 import { formatRelativeTime } from '../utils/datetime';
 
@@ -11,13 +11,32 @@ interface SecretTableProps {
   onSelect?: (secret: SecretListItem) => void;
 }
 
-const SecretTable = (props: SecretTableProps) => (
+const SecretTable = (props: SecretTableProps) => {
+  const [search, setSearch] = createSignal('');
+  const filtered = () => {
+    const query = search().toLowerCase().trim();
+    if (!query) return props.secrets;
+    return props.secrets.filter((s) =>
+      s.name.toLowerCase().includes(query) ||
+      s.type?.toLowerCase().includes(query)
+    );
+  };
+  return (
   <div class="flex flex-col gap-3">
     <div class="flex items-center justify-between">
       <h2 class="text-lg font-semibold">Secrets</h2>
-      <Show when={props.loading}>
-        <span class="loading loading-xs loading-spinner" />
-      </Show>
+      <div class="flex items-center gap-2">
+        <input
+          type="text"
+          placeholder="Filter by name or type..."
+          class="input input-bordered input-sm w-64"
+          value={search()}
+          onInput={(e) => setSearch(e.currentTarget.value)}
+        />
+        <Show when={props.loading}>
+          <span class="loading loading-xs loading-spinner" />
+        </Show>
+      </div>
     </div>
     <div class="overflow-x-auto rounded-lg border border-base-200/50 bg-base-200/30">
       <table class="table table-zebra table-pin-rows">
@@ -31,16 +50,16 @@ const SecretTable = (props: SecretTableProps) => (
         </thead>
         <tbody>
           <Show
-            when={props.secrets.length}
+            when={filtered().length}
             fallback={
               <tr>
                 <td colSpan={4} class="text-center text-sm opacity-70">
-                  No Secrets in this namespace.
+                  {search() ? 'No Secrets match the filter.' : 'No Secrets in this namespace.'}
                 </td>
               </tr>
             }
           >
-            <For each={props.secrets}>
+            <For each={filtered()}>
               {(secret) => (
                 <tr
                   class={`cursor-pointer hover:bg-base-200/50 ${props.selectedSecret === secret.name ? 'bg-primary/20 border-l-4 border-primary' : ''}`}
@@ -58,6 +77,7 @@ const SecretTable = (props: SecretTableProps) => (
       </table>
     </div>
   </div>
-);
+  );
+};
 
 export default SecretTable;

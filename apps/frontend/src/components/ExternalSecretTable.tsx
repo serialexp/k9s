@@ -1,4 +1,4 @@
-import { For, Show } from 'solid-js';
+import { createSignal, For, Show } from 'solid-js';
 import type { ExternalSecretListItem } from '../lib/api';
 import { formatRelativeTime } from '../utils/datetime';
 
@@ -20,13 +20,33 @@ const getReadyBadgeClass = (status?: string) => {
   }
 };
 
-const ExternalSecretTable = (props: ExternalSecretTableProps) => (
+const ExternalSecretTable = (props: ExternalSecretTableProps) => {
+  const [search, setSearch] = createSignal('');
+  const filtered = () => {
+    const query = search().toLowerCase().trim();
+    if (!query) return props.externalsecrets;
+    return props.externalsecrets.filter((es) =>
+      es.name.toLowerCase().includes(query) ||
+      es.secretName?.toLowerCase().includes(query) ||
+      es.storeName?.toLowerCase().includes(query)
+    );
+  };
+  return (
   <div class="flex flex-col gap-3">
     <div class="flex items-center justify-between">
       <h2 class="text-lg font-semibold">External Secrets</h2>
-      <Show when={props.loading}>
-        <span class="loading loading-xs loading-spinner" />
-      </Show>
+      <div class="flex items-center gap-2">
+        <input
+          type="text"
+          placeholder="Filter by name or store..."
+          class="input input-bordered input-sm w-64"
+          value={search()}
+          onInput={(e) => setSearch(e.currentTarget.value)}
+        />
+        <Show when={props.loading}>
+          <span class="loading loading-xs loading-spinner" />
+        </Show>
+      </div>
     </div>
     <div class="overflow-x-auto rounded-lg border border-base-200/50 bg-base-200/30">
       <table class="table table-zebra table-pin-rows">
@@ -42,16 +62,16 @@ const ExternalSecretTable = (props: ExternalSecretTableProps) => (
         </thead>
         <tbody>
           <Show
-            when={props.externalsecrets.length}
+            when={filtered().length}
             fallback={
               <tr>
                 <td colSpan={6} class="text-center text-sm opacity-70">
-                  No external secrets in this namespace.
+                  {search() ? 'No external secrets match the filter.' : 'No external secrets in this namespace.'}
                 </td>
               </tr>
             }
           >
-            <For each={props.externalsecrets}>
+            <For each={filtered()}>
               {(externalsecret) => (
                 <tr
                   class={`cursor-pointer hover:bg-base-200/50 ${props.selectedExternalSecret === externalsecret.name ? 'bg-primary/20 border-l-4 border-primary' : ''}`}
@@ -81,6 +101,7 @@ const ExternalSecretTable = (props: ExternalSecretTableProps) => (
       </table>
     </div>
   </div>
-);
+  );
+};
 
 export default ExternalSecretTable;

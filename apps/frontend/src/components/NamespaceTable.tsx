@@ -1,7 +1,7 @@
 // ABOUTME: Table component for displaying Kubernetes namespaces with resource metrics
 // ABOUTME: Shows name, status, pod count, CPU/memory requests and usage, and age
 
-import { For, Show } from 'solid-js';
+import { createSignal, For, Show } from 'solid-js';
 import type { NamespaceListItem } from '../lib/api';
 import { formatRelativeTime } from '../utils/datetime';
 import { formatCpuComparison, formatMemoryComparison, formatPercent } from '../utils/resources';
@@ -20,13 +20,31 @@ const getUtilizationColor = (utilization?: number): string => {
   return '';
 };
 
-const NamespaceTable = (props: NamespaceTableProps) => (
+const NamespaceTable = (props: NamespaceTableProps) => {
+  const [search, setSearch] = createSignal('');
+  const filtered = () => {
+    const query = search().toLowerCase().trim();
+    if (!query) return props.namespaces;
+    return props.namespaces.filter((ns) =>
+      ns.name.toLowerCase().includes(query)
+    );
+  };
+  return (
   <div class="flex flex-col gap-3">
     <div class="flex items-center justify-between">
       <h2 class="text-lg font-semibold">Namespaces</h2>
-      <Show when={props.loading}>
-        <span class="loading loading-xs loading-spinner" />
-      </Show>
+      <div class="flex items-center gap-2">
+        <input
+          type="text"
+          placeholder="Filter by name..."
+          class="input input-bordered input-sm w-64"
+          value={search()}
+          onInput={(e) => setSearch(e.currentTarget.value)}
+        />
+        <Show when={props.loading}>
+          <span class="loading loading-xs loading-spinner" />
+        </Show>
+      </div>
     </div>
     <div class="overflow-x-auto rounded-lg border border-base-200/50 bg-base-200/30">
       <table class="table table-zebra table-pin-rows">
@@ -44,16 +62,16 @@ const NamespaceTable = (props: NamespaceTableProps) => (
         </thead>
         <tbody>
           <Show
-            when={props.namespaces.length}
+            when={filtered().length}
             fallback={
               <tr>
                 <td colSpan={8} class="text-center text-sm opacity-70">
-                  No namespaces found.
+                  {search() ? 'No namespaces match the filter.' : 'No namespaces found.'}
                 </td>
               </tr>
             }
           >
-            <For each={props.namespaces}>
+            <For each={filtered()}>
               {(ns) => (
                 <tr
                   class={`cursor-pointer hover:bg-base-200/50 ${props.selectedNamespace === ns.name ? 'bg-primary/20 border-l-4 border-primary' : ''}`}
@@ -89,6 +107,7 @@ const NamespaceTable = (props: NamespaceTableProps) => (
       </table>
     </div>
   </div>
-);
+  );
+};
 
 export default NamespaceTable;
