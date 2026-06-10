@@ -153,8 +153,8 @@ const ConfigMapListPage = () => {
         setConfigMaps((prev) => sortConfigMaps(applyConfigMapWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('ConfigMap stream error', error);
-        setConfigMapsError(error.message);
+        if (error) console.error('ConfigMap stream error', error);
+        setConfigMapsError(error?.message ?? '');
       }
     );
   });

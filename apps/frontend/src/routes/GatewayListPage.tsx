@@ -155,8 +155,8 @@ const GatewayListPage = () => {
         setGateways((prev) => sortGateways(applyGatewayWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('Gateway stream error', error);
-        setGatewaysError(error.message);
+        if (error) console.error('Gateway stream error', error);
+        setGatewaysError(error?.message ?? '');
       }
     );
   });

@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [solid(), tailwindcss()],
   server: {
     port: 3131,
+    allowedHosts: ['k9s.test'],
     proxy: {
       '/api': {
         target: 'http://localhost:3130',

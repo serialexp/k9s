@@ -177,8 +177,8 @@ const RolloutListPage = () => {
         setRollouts((prev) => sortRollouts(applyRolloutWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('Rollout stream error', error);
-        setRolloutsError(error.message);
+        if (error) console.error('Rollout stream error', error);
+        setRolloutsError(error?.message ?? '');
       }
     );
   });

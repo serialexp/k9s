@@ -159,6 +159,30 @@ export class NamespaceService extends BaseKubeService {
 		});
 	}
 
+	async forceDeleteNamespace(name: string): Promise<void> {
+		return this.withCredentialRetry(async () => {
+			const ns = await this.coreApi.readNamespace({ name });
+
+			if (ns.spec) {
+				ns.spec.finalizers = [];
+			}
+			if (ns.metadata) {
+				ns.metadata.finalizers = [];
+			}
+
+			await this.coreApi.replaceNamespaceFinalize({ name, body: ns });
+
+			try {
+				await this.coreApi.deleteNamespace({ name });
+			} catch (error) {
+				const err = error as { statusCode?: number; code?: number };
+				if ((err.statusCode ?? err.code) !== 404) {
+					throw error;
+				}
+			}
+		});
+	}
+
 	async streamNamespaces(
 		onData: (data: string) => void,
 		onError: (err: unknown) => void,

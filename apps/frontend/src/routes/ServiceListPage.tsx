@@ -173,8 +173,8 @@ const ServiceListPage = () => {
         setServices((prev) => sortServices(applyServiceWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('Service stream error', error);
-        setServicesError(error.message);
+        if (error) console.error('Service stream error', error);
+        setServicesError(error?.message ?? '');
       }
     );
   });

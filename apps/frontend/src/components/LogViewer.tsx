@@ -354,6 +354,7 @@ const LogViewer = (props: LogViewerProps) => {
   const [showPrevious, setShowPrevious] = createSignal(false);
   const [isStreaming, setIsStreaming] = createSignal(false);
   const [autoScroll, setAutoScroll] = createSignal(true);
+  const [filterText, setFilterText] = createSignal('');
 
   const selectedContainerStatus = createMemo(() => {
     const container = selectedContainer();
@@ -478,12 +479,46 @@ const LogViewer = (props: LogViewerProps) => {
     });
   });
 
-  const structuredEntries = createMemo(() => entries().filter((entry) => entry.message.length));
+  const filteredEntries = createMemo(() => {
+    const filter = filterText().toLowerCase();
+    if (!filter) return entries();
+    return entries().filter((entry) => entry.raw.toLowerCase().includes(filter));
+  });
+
+  const filteredStructuredEntries = createMemo(() => filteredEntries().filter((entry) => entry.message.length));
+
+  const highlightMatch = (text: string): (string | { text: string; highlight: true })[] => {
+    const filter = filterText();
+    if (!filter) return [text];
+    const lower = text.toLowerCase();
+    const filterLower = filter.toLowerCase();
+    const parts: (string | { text: string; highlight: true })[] = [];
+    let cursor = 0;
+    let pos = lower.indexOf(filterLower, cursor);
+    while (pos !== -1) {
+      if (pos > cursor) parts.push(text.slice(cursor, pos));
+      parts.push({ text: text.slice(pos, pos + filter.length), highlight: true });
+      cursor = pos + filter.length;
+      pos = lower.indexOf(filterLower, cursor);
+    }
+    if (cursor < text.length) parts.push(text.slice(cursor));
+    return parts;
+  };
+
+  const renderHighlighted = (text: string) => (
+    <For each={highlightMatch(text)}>
+      {(part) =>
+        typeof part === 'string' ? <>{part}</> : <mark class="bg-warning/40 text-warning-content rounded-sm">{part.text}</mark>
+      }
+    </For>
+  );
 
   const renderAnsi = (message: string) => (
     <For each={parseAnsi(message)}>
       {(segment) => (
-        <span class={segment.className ?? undefined}>{segment.text}</span>
+        <span class={segment.className ?? undefined}>
+          {filterText() ? renderHighlighted(segment.text) : segment.text}
+        </span>
       )}
     </For>
   );
@@ -505,7 +540,7 @@ const LogViewer = (props: LogViewerProps) => {
       case 'messages':
         return (
           <div class="flex flex-col gap-1 text-xs font-mono">
-            <For each={structuredEntries()}>
+            <For each={filteredStructuredEntries()}>
               {(entry) => (
                 <pre class="whitespace-pre-wrap break-words overflow-x-hidden">{renderAnsi(entry.message)}</pre>
               )}
@@ -515,14 +550,16 @@ const LogViewer = (props: LogViewerProps) => {
       case 'raw':
         return (
           <pre class="rounded-lg bg-base-300/60 p-3 text-xs whitespace-pre-wrap break-words overflow-x-hidden">
-            {entries().map((entry) => entry.raw).join('\n')}
+            {filterText()
+              ? filteredEntries().map((entry) => entry.raw).join('\n')
+              : entries().map((entry) => entry.raw).join('\n')}
           </pre>
         );
       case 'structured':
       default:
         return (
           <div class="space-y-2 rounded-lg bg-base-300/40 p-3 text-xs">
-            <For each={entries()}>
+            <For each={filteredEntries()}>
               {(entry) => {
                 const info = formatTimestamp(entry.timestamp);
                 return (
@@ -549,7 +586,9 @@ const LogViewer = (props: LogViewerProps) => {
                       </pre>
                       <Show when={entry.json}>
                         <pre class="mt-2 rounded bg-base-300/70 p-2 whitespace-pre-wrap break-words overflow-x-hidden">
-                          {JSON.stringify(entry.json, null, 2)}
+                          {filterText()
+                            ? renderHighlighted(JSON.stringify(entry.json, null, 2))
+                            : JSON.stringify(entry.json, null, 2)}
                         </pre>
                       </Show>
                     </div>
@@ -564,8 +603,32 @@ const LogViewer = (props: LogViewerProps) => {
 
   return (
     <div class="flex flex-col h-full relative">
-      <div class="flex items-center justify-between flex-shrink-0 mb-4">
-        <h2 class="text-lg font-semibold">Logs</h2>
+      <div class="flex items-center justify-between flex-shrink-0 mb-4 gap-2">
+        <h2 class="text-lg font-semibold shrink-0">Logs</h2>
+        <div class="relative flex-1 max-w-xs">
+          <input
+            type="text"
+            placeholder="Filter logs…"
+            class="input input-xs input-bordered w-full pr-8 font-mono"
+            value={filterText()}
+            onInput={(e) => setFilterText(e.currentTarget.value)}
+          />
+          <Show when={filterText()}>
+            <button
+              type="button"
+              class="absolute right-1.5 top-1/2 -translate-y-1/2 btn btn-ghost btn-xs btn-circle"
+              onClick={() => setFilterText('')}
+              title="Clear filter"
+            >
+              ✕
+            </button>
+          </Show>
+        </div>
+        <Show when={filterText()}>
+          <span class="text-xs opacity-60 shrink-0">
+            {filteredEntries().length}/{entries().length}
+          </span>
+        </Show>
         <div class="flex items-center gap-2">
           <Show when={props.containers.length}>
             <select
@@ -633,7 +696,9 @@ const LogViewer = (props: LogViewerProps) => {
           fallback={<p class="text-sm opacity-60">Select a pod to view logs.</p>}
         >
           <Show when={entries().length} fallback={isStreaming() ? <span class="loading loading-dots" /> : <p class="text-sm opacity-60">No log entries yet.</p>}>
-            {content()}
+            <Show when={filteredEntries().length || !filterText()} fallback={<p class="text-sm opacity-60">No entries match "{filterText()}"</p>}>
+              {content()}
+            </Show>
           </Show>
         </Show>
       </div>

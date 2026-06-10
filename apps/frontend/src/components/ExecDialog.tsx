@@ -1,7 +1,7 @@
 // ABOUTME: Dialog for executing commands in a Kubernetes pod container
 // ABOUTME: Allows user to select container, enter command, and view output
 
-import { createSignal, Show, createEffect, For } from 'solid-js';
+import { createSignal, Show, createEffect, For, on } from 'solid-js';
 import { execInPod, type ExecResult } from '../lib/api';
 
 interface Container {
@@ -23,8 +23,8 @@ const ExecDialog = (props: ExecDialogProps) => {
   const [error, setError] = createSignal<string | null>(null);
   const [result, setResult] = createSignal<ExecResult | null>(null);
 
-  createEffect(() => {
-    if (props.open) {
+  createEffect(on(() => props.open, (open) => {
+    if (open) {
       setError(null);
       setResult(null);
       setCommand('');
@@ -32,7 +32,7 @@ const ExecDialog = (props: ExecDialogProps) => {
         setContainer(props.containers[0].name);
       }
     }
-  });
+  }));
 
   const parseCommand = (input: string): string[] => {
     const parts: string[] = [];

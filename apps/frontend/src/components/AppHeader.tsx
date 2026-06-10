@@ -1,8 +1,9 @@
-import { For, Show, onMount, onCleanup } from 'solid-js';
+import { createSignal, For, Show, onMount, onCleanup } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { contextStore } from '../stores/contextStore';
 import { portForwardStore } from '../stores/portForwardStore';
 import PortForwardModal from './PortForwardModal';
+import ContextManageDialog from './ContextManageDialog';
 
 interface AppHeaderProps {
   currentContext?: string;
@@ -15,6 +16,7 @@ interface AppHeaderProps {
 
 const AppHeader = (props: AppHeaderProps) => {
   const navigate = useNavigate();
+  const [manageDialogOpen, setManageDialogOpen] = createSignal(false);
 
   onMount(() => {
     portForwardStore.startPolling();
@@ -49,6 +51,7 @@ const AppHeader = (props: AppHeaderProps) => {
       resources: [
         { value: 'pods', label: 'Pods' },
         { value: 'deployments', label: 'Deployments' },
+        { value: 'replicasets', label: 'ReplicaSets' },
         { value: 'statefulsets', label: 'StatefulSets' },
         { value: 'daemonsets', label: 'DaemonSets' },
         { value: 'jobs', label: 'Jobs' },
@@ -57,14 +60,17 @@ const AppHeader = (props: AppHeaderProps) => {
         { value: 'ingresses', label: 'Ingresses' },
         { value: 'configmaps', label: 'ConfigMaps' },
         { value: 'secrets', label: 'Secrets' },
-        { value: 'crds', label: 'CRDs', title: 'CustomResourceDefinitions' },
         { value: 'persistentvolumeclaims', label: 'PVCs', title: 'PersistentVolumeClaims' },
-        { value: 'storageclasses', label: 'StorageClasses' },
         { value: 'serviceaccounts', label: 'ServiceAccounts' },
         { value: 'roles', label: 'Roles' },
-        { value: 'clusterroles', label: 'ClusterRoles' },
         { value: 'hpas', label: 'HPAs', title: 'HorizontalPodAutoscalers' },
         { value: 'pdbs', label: 'PDBs', title: 'PodDisruptionBudgets' },
+      ],
+    },
+    {
+      label: 'helm',
+      resources: [
+        { value: 'helmreleases', label: 'Releases' },
       ],
     },
     {
@@ -93,13 +99,6 @@ const AppHeader = (props: AppHeaderProps) => {
       label: 'keda',
       resources: [
         { value: 'scaledobjects', label: 'ScaledObjects' },
-      ],
-    },
-    {
-      label: 'karpenter',
-      resources: [
-        { value: 'nodeclasses', label: 'NodeClasses' },
-        { value: 'nodepools', label: 'NodePools' },
       ],
     },
   ];
@@ -136,6 +135,17 @@ const AppHeader = (props: AppHeaderProps) => {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
             </svg>
             Import
+          </button>
+          <button
+            class="btn btn-xs btn-outline"
+            onClick={() => setManageDialogOpen(true)}
+            title="Manage contexts"
+          >
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Manage
           </button>
         </div>
       </div>
@@ -212,20 +222,69 @@ const AppHeader = (props: AppHeaderProps) => {
             <button
               type="button"
               class="btn btn-xs btn-outline"
-              onClick={() => handleResourceTypeChange('installed-apps')}
+              onClick={() => handleResourceTypeChange('crds')}
+              title="CustomResourceDefinitions"
             >
-              Apps
+              CRDs
             </button>
             <button
               type="button"
-              class={`btn btn-xs ${portForwardStore.count() > 0 ? 'btn-primary' : 'btn-outline'}`}
-              onClick={() => portForwardStore.openModal()}
+              class="btn btn-xs btn-outline"
+              onClick={() => handleResourceTypeChange('storageclasses')}
+            >
+              StorageClasses
+            </button>
+            <button
+              type="button"
+              class="btn btn-xs btn-outline"
+              onClick={() => handleResourceTypeChange('ingressclasses')}
+            >
+              IngressClasses
+            </button>
+            <button
+              type="button"
+              class="btn btn-xs btn-outline"
+              onClick={() => handleResourceTypeChange('clusterroles')}
+            >
+              ClusterRoles
+            </button>
+            <div class="flex items-center gap-2 ml-2">
+              <span class="text-xs uppercase opacity-60">Karpenter</span>
+              <button
+                type="button"
+                class="btn btn-xs btn-outline"
+                onClick={() => handleResourceTypeChange('nodeclasses')}
+              >
+                NodeClasses
+              </button>
+              <button
+                type="button"
+                class="btn btn-xs btn-outline"
+                onClick={() => handleResourceTypeChange('nodepools')}
+              >
+                NodePools
+              </button>
+            </div>
+            <div class="flex items-center gap-2 ml-2">
+              <span class="text-xs uppercase opacity-60">System</span>
+              <button
+                type="button"
+                class="btn btn-xs btn-outline"
+                onClick={() => handleResourceTypeChange('installed-apps')}
+              >
+                Apps
+              </button>
+              <button
+                type="button"
+                class={`btn btn-xs ${portForwardStore.count() > 0 ? 'btn-primary' : 'btn-outline'}`}
+                onClick={() => portForwardStore.openModal()}
             >
               Port Forwards
               <Show when={portForwardStore.count() > 0}>
                 <span class="badge badge-xs">{portForwardStore.count()}</span>
               </Show>
             </button>
+            </div>
           </div>
         </div>
         <div class="flex flex-wrap gap-1 items-center">
@@ -251,6 +310,10 @@ const AppHeader = (props: AppHeaderProps) => {
         </div>
       </div>
       <PortForwardModal />
+      <ContextManageDialog
+        open={manageDialogOpen()}
+        onClose={() => setManageDialogOpen(false)}
+      />
     </header>
   );
 };

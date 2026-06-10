@@ -177,8 +177,8 @@ const ExternalSecretListPage = () => {
         setExternalSecrets((prev) => sortExternalSecrets(applyExternalSecretWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('ExternalSecret stream error', error);
-        setExternalSecretsError(error.message);
+        if (error) console.error('ExternalSecret stream error', error);
+        setExternalSecretsError(error?.message ?? '');
       }
     );
   });

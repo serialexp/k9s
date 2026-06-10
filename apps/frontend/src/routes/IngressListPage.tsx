@@ -154,8 +154,8 @@ const IngressListPage = () => {
         setIngresses((prev) => sortIngresses(applyIngressWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('Ingress stream error', error);
-        setIngressesError(error.message);
+        if (error) console.error('Ingress stream error', error);
+        setIngressesError(error?.message ?? '');
       }
     );
   });

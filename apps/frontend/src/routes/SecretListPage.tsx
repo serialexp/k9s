@@ -165,8 +165,8 @@ const SecretListPage = () => {
         setSecrets((prev) => sortSecrets(applySecretWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('Secret stream error', error);
-        setSecretsError(error.message);
+        if (error) console.error('Secret stream error', error);
+        setSecretsError(error?.message ?? '');
       }
     );
   });

@@ -14,6 +14,7 @@ import {
   ApiError,
   createNamespace,
   deleteNamespace,
+  forceDeleteNamespace,
   fetchNamespace,
   fetchNamespaceManifest,
   fetchNamespacesFull,
@@ -173,8 +174,8 @@ const NamespaceListPage = () => {
         setNamespaces((prev) => sortNamespaces(applyNamespaceWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('Namespace stream error', error);
-        setNamespacesError(error.message);
+        if (error) console.error('Namespace stream error', error);
+        setNamespacesError(error?.message ?? '');
       }
     );
   });
@@ -212,6 +213,23 @@ const NamespaceListPage = () => {
     navigate(`/${encodeURIComponent(context())}/${encodeURIComponent(namespace())}/namespaces`);
   };
 
+  const handleForceDeleteNamespace = async () => {
+    const name = resourceName();
+    if (!name) return;
+
+    try {
+      await forceDeleteNamespace(name);
+      navigate(`/${encodeURIComponent(context())}/${encodeURIComponent(namespace())}/namespaces`);
+    } catch (error) {
+      console.error('Failed to force delete namespace', error);
+      if (error instanceof ApiError) {
+        setNamespacesError(error.message);
+      } else {
+        setNamespacesError('Failed to force delete namespace');
+      }
+    }
+  };
+
   const handleCreateNamespace = async (name: string) => {
     await createNamespace(name);
     await loadNamespaces();
@@ -238,6 +256,19 @@ const NamespaceListPage = () => {
           message: `Are you sure you want to delete namespace "${resourceName()}"? This will delete all resources in the namespace and cannot be undone.`
         }
       });
+
+      if (namespaceDetail()?.finalizers?.length) {
+        actions.push({
+          label: 'Force Delete',
+          variant: 'warning',
+          icon: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
+          onClick: handleForceDeleteNamespace,
+          confirm: {
+            title: 'Force Delete Namespace',
+            message: `This will remove all finalizers and delete namespace "${resourceName()}". Finalizer controllers will not run. Are you sure?`
+          }
+        });
+      }
     }
 
     return actions;

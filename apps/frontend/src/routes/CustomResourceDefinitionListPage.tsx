@@ -152,8 +152,8 @@ const CustomResourceDefinitionListPage = () => {
         setCrds((prev) => sortCrds(applyCrdWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('CRD stream error', error);
-        setCrdsError(error.message);
+        if (error) console.error('CRD stream error', error);
+        setCrdsError(error?.message ?? '');
       }
     );
   });

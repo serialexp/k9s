@@ -151,8 +151,8 @@ const StorageClassListPage = () => {
         setStorageClasses((prev) => sortStorageClasses(applyStorageClassWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('StorageClass stream error', error);
-        setStorageClassesError(error.message);
+        if (error) console.error('StorageClass stream error', error);
+        setStorageClassesError(error?.message ?? '');
       }
     );
   });

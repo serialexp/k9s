@@ -13,16 +13,17 @@ const hasRecentRestart = (pod: PodListItem): boolean => {
 };
 
 const generateMarkdownTable = (pods: PodListItem[]): string => {
-  const headers = ['Name', 'Namespace', 'Status', 'Usage', 'Requests', 'Age'];
+  const headers = ['Name', 'Namespace', 'Status', 'Usage', 'Requests', 'Mem Limit', 'Age'];
   const separator = headers.map(() => '---');
 
   const rows = pods.map((pod) => {
     const status = hasRecentRestart(pod) ? `${pod.phase ?? 'Unknown'} (${pod.restarts} restarts)` : (pod.phase ?? 'Unknown');
     const usage = formatResourceLine(pod.cpuUsage, pod.memoryUsage);
     const requests = formatResourceLine(pod.cpuRequests, pod.memoryRequests);
+    const memLimit = pod.memoryLimits ?? '-';
     const age = formatRelativeTime(pod.creationTimestamp);
 
-    return [pod.name, pod.namespace, status, usage, requests, age];
+    return [pod.name, pod.namespace, status, usage, requests, memLimit, age];
   });
 
   const lines = [
@@ -163,6 +164,9 @@ const PodTable = (props: PodTableProps) => {
                     <div class="flex flex-col leading-tight">
                       <span>{formatResourceLine(pod.cpuUsage, pod.memoryUsage)}</span>
                       <span class="opacity-60">{formatResourceLine(pod.cpuRequests, pod.memoryRequests)}</span>
+                      <Show when={pod.memoryLimits}>
+                        <span class="badge badge-warning badge-xs font-mono">limit {pod.memoryLimits}</span>
+                      </Show>
                     </div>
                   </td>
                   <td class="text-xs opacity-80">{formatRelativeTime(pod.creationTimestamp)}</td>

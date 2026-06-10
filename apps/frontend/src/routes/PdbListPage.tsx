@@ -167,8 +167,8 @@ const PdbListPage = () => {
         setPdbs((prev) => sortPdbs(applyPdbWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('PDB stream error', error);
-        setPdbsError(error.message);
+        if (error) console.error('PDB stream error', error);
+        setPdbsError(error?.message ?? '');
       }
     );
   });

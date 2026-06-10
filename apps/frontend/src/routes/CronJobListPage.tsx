@@ -154,8 +154,8 @@ const CronJobListPage = () => {
         setCronJobs((prev) => sortCronJobs(applyCronJobWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('CronJob stream error', error);
-        setCronJobsError(error.message);
+        if (error) console.error('CronJob stream error', error);
+        setCronJobsError(error?.message ?? '');
       }
     );
   });

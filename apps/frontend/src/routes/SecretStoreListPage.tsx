@@ -177,8 +177,8 @@ const SecretStoreListPage = () => {
         setSecretStores((prev) => sortSecretStores(applySecretStoreWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('SecretStore stream error', error);
-        setSecretStoresError(error.message);
+        if (error) console.error('SecretStore stream error', error);
+        setSecretStoresError(error?.message ?? '');
       }
     );
   });

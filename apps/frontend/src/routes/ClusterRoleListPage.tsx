@@ -152,8 +152,8 @@ const ClusterRoleListPage = () => {
         setClusterRoles((prev) => sortClusterRoles(applyClusterRoleWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('ClusterRole stream error', error);
-        setClusterRolesError(error.message);
+        if (error) console.error('ClusterRole stream error', error);
+        setClusterRolesError(error?.message ?? '');
       }
     );
   });

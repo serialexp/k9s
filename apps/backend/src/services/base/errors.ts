@@ -12,3 +12,17 @@ export class CRDNotInstalledError extends Error {
 		this.name = "CRDNotInstalledError";
 	}
 }
+
+/**
+ * Raised when applying an edited manifest fails. Carries an HTTP status code so
+ * the API layer can map it back to a meaningful response for the client.
+ */
+export class ManifestApplyError extends Error {
+	constructor(
+		message: string,
+		public readonly statusCode: number,
+	) {
+		super(message);
+		this.name = "ManifestApplyError";
+	}
+}

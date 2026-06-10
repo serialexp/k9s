@@ -4,7 +4,7 @@
 import { createSignal, For, Show } from 'solid-js';
 import type { NodeListItem } from '../lib/api';
 import { formatRelativeTime } from '../utils/datetime';
-import { formatCpuQuantity, formatMemoryQuantity } from '../utils/resources';
+import { formatCpuQuantity, formatMemoryQuantity, parseMemoryToBytes } from '../utils/resources';
 
 interface NodeTableProps {
   nodes: NodeListItem[];
@@ -196,10 +196,6 @@ const NodeTable = (props: NodeTableProps) => {
                               <span class="opacity-60 uppercase mr-1">Use</span>
                               {cpuUsageLine}
                             </span>
-                            <span class="opacity-60">
-                              <span class="uppercase mr-1">Alloc</span>
-                              {cpuAllocLine}
-                            </span>
                             <Show when={node.cpuRequests}>
                               <span class="opacity-60">
                                 <span class="uppercase mr-1">Req</span>
@@ -214,14 +210,15 @@ const NodeTable = (props: NodeTableProps) => {
                               <span class="opacity-60 uppercase mr-1">Use</span>
                               {memoryUsageLine}
                             </span>
-                            <span class="opacity-60">
-                              <span class="uppercase mr-1">Alloc</span>
-                              {memoryAllocLine}
-                            </span>
                             <Show when={node.memoryRequests}>
                               <span class="opacity-60">
                                 <span class="uppercase mr-1">Req</span>
                                 {memoryRequestLine}
+                              </span>
+                            </Show>
+                            <Show when={node.memoryLimits && parseMemoryToBytes(node.memoryLimits)! > parseMemoryToBytes(node.memoryAllocatable)!}>
+                              <span class="badge badge-warning badge-xs font-mono whitespace-normal h-auto py-0.5 leading-tight">
+                                Max {formatMemoryQuantity(node.memoryLimits)}
                               </span>
                             </Show>
                           </div>

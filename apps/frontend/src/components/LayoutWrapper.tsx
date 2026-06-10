@@ -40,9 +40,11 @@ const LayoutWrapper = (props: LayoutWrapperProps) => {
     if (path.includes('/applications')) return 'applications';
     if (path.includes('/statefulsets')) return 'statefulsets';
     if (path.includes('/daemonsets')) return 'daemonsets';
+    if (path.includes('/replicasets')) return 'replicasets';
     if (path.includes('/deployments')) return 'deployments';
     if (path.includes('/configmaps')) return 'configmaps';
     if (path.includes('/cronjobs')) return 'cronjobs';
+    if (path.includes('/ingressclasses')) return 'ingressclasses';
     if (path.includes('/ingresses')) return 'ingresses';
     if (path.includes('/services')) return 'services';
     if (path.includes('/secrets')) return 'secrets';
@@ -85,10 +87,17 @@ const LayoutWrapper = (props: LayoutWrapperProps) => {
     navigate(`/${encodeURIComponent(newContext)}/${encodeURIComponent(newNamespace)}/${resourceType}`);
   };
 
+  const clusterScopedResources = new Set([
+    'nodes', 'node-events', 'node-pool-summary', 'namespaces',
+    'crds', 'storageclasses', 'ingressclasses', 'clusterroles',
+    'nodeclasses', 'nodepools', 'installed-apps',
+  ]);
+
   const handleNamespaceChange = (newNamespace: string) => {
     const context = decodedContextOrStore();
     const resourceType = currentResourceType();
-    navigate(`/${encodeURIComponent(context)}/${encodeURIComponent(newNamespace)}/${resourceType}`);
+    const effectiveResourceType = clusterScopedResources.has(resourceType) ? 'pods' : resourceType;
+    navigate(`/${encodeURIComponent(context)}/${encodeURIComponent(newNamespace)}/${effectiveResourceType}`);
   };
 
   const handleResourceTypeChange = (newResourceType: string) => {

@@ -1,11 +1,16 @@
+import { readFileSync, writeFileSync } from "fs";
+import { join } from "path";
 import { PassThrough } from "stream";
+import yaml from "yaml";
 import { ClusterRoleService } from "./resources/ClusterRoleService.js";
 import { ExecService } from "./resources/ExecService.js";
 import { NodeExecService } from "./resources/NodeExecService.js";
 import { NamespaceService } from "./resources/NamespaceService.js";
 import { NodeClassService } from "./resources/NodeClassService.js";
 import { NodePoolService } from "./resources/NodePoolService.js";
+import { ReplicaSetService } from "./resources/ReplicaSetService.js";
 import { RoleService } from "./resources/RoleService.js";
+import { IngressClassService } from "./resources/IngressClassService.js";
 import { StorageClassService } from "./resources/StorageClassService.js";
 import { ConfigMapService } from "./resources/ConfigMapService.js";
 import { SecretService } from "./resources/SecretService.js";
@@ -15,6 +20,8 @@ import { PortForwardService } from "./resources/PortForwardService.js";
 import { VirtualServiceService } from "./resources/VirtualServiceService.js";
 import { GatewayService } from "./resources/GatewayService.js";
 import { DestinationRuleService } from "./resources/DestinationRuleService.js";
+import { HelmReleaseService } from "./resources/HelmReleaseService.js";
+import { ManifestApplyService } from "./resources/ManifestApplyService.js";
 import { CRDNotInstalledError } from "./base/errors.js";
 import {
 	AppsV1Api,
@@ -64,6 +71,16 @@ export type {
 	NodePoolListItem,
 	NodePoolWatchEvent,
 } from "./resources/NodePoolService.types.js";
+export type {
+	IngressClassDetail,
+	IngressClassListItem,
+	IngressClassWatchEvent,
+} from "./resources/IngressClassService.types.js";
+export type {
+	ReplicaSetDetail,
+	ReplicaSetListItem,
+	ReplicaSetWatchEvent,
+} from "./resources/ReplicaSetService.types.js";
 export type {
 	StorageClassDetail,
 	StorageClassListItem,
@@ -144,7 +161,13 @@ export type {
 	DestinationRuleTrafficPolicy,
 	DestinationRuleWatchEvent,
 } from "./resources/DestinationRuleService.types.js";
-export { CRDNotInstalledError } from "./base/errors.js";
+export type {
+	HelmReleaseDetail,
+	HelmReleaseListItem,
+	HelmReleaseWatchEvent,
+} from "./resources/HelmReleaseService.types.js";
+export { CRDNotInstalledError, ManifestApplyError } from "./base/errors.js";
+export type { AppliedManifest } from "./resources/ManifestApplyService.js";
 
 const of = <T>(value: T) =>
 	({
@@ -181,6 +204,7 @@ type NodePodDetail = {
 	namespace: string;
 	cpuMillicores: number;
 	memoryBytes: number;
+	memoryLimitBytes: number;
 	cpuRequests?: string;
 	memoryRequests?: string;
 	cpuUsage?: string;
@@ -252,6 +276,7 @@ export interface PodListItem {
 	creationTimestamp?: string;
 	cpuRequests?: string;
 	memoryRequests?: string;
+	memoryLimits?: string;
 	cpuUsage?: string;
 	memoryUsage?: string;
 }
@@ -279,6 +304,7 @@ export interface NodeListItem {
 	podIPsCapacity?: number;
 	cpuRequests?: string;
 	memoryRequests?: string;
+	memoryLimits?: string;
 	totalRestarts: number;
 	blockers?: NodeBlocker[];
 	pods: Array<{
@@ -299,6 +325,30 @@ export interface NodeCondition {
 	message?: string;
 	lastHeartbeatTime?: string;
 	lastTransitionTime?: string;
+}
+
+export interface NodeOwnerRef {
+	kind: string;
+	name: string;
+	apiVersion: string;
+	uid: string;
+}
+
+export interface NodeClaimSummary {
+	name: string;
+	nodePoolName?: string;
+	instanceType?: string;
+	capacityType?: string;
+	zone?: string;
+	conditions: Array<{
+		type: string;
+		status: string;
+		reason?: string;
+		message?: string;
+		lastTransitionTime?: string;
+	}>;
+	creationTimestamp?: string;
+	finalizers: string[];
 }
 
 export interface NodeDetail extends NodeListItem {
@@ -329,6 +379,8 @@ export interface NodeDetail extends NodeListItem {
 	podCIDR?: string;
 	podCIDRs?: string[];
 	providerID?: string;
+	ownerNodeClaim?: NodeOwnerRef;
+	finalizers: string[];
 }
 
 export interface NodeEvent {
@@ -1138,7 +1190,9 @@ export class KubeService {
 	private nodeExecService: NodeExecService;
 	private nodeClassService: NodeClassService;
 	private nodePoolService: NodePoolService;
+	private replicaSetService: ReplicaSetService;
 	private roleService: RoleService;
+	private ingressClassService: IngressClassService;
 	private storageClassService: StorageClassService;
 	private configMapService: ConfigMapService;
 	private secretService: SecretService;
@@ -1148,6 +1202,8 @@ export class KubeService {
 	private virtualServiceService: VirtualServiceService;
 	private gatewayService: GatewayService;
 	private destinationRuleService: DestinationRuleService;
+	private helmReleaseService: HelmReleaseService;
+	private manifestApplyService: ManifestApplyService;
 
 	constructor() {
 		this.kubeConfig = new KubeConfig();
@@ -1168,7 +1224,9 @@ export class KubeService {
 		this.nodeExecService = new NodeExecService(this.kubeConfig);
 		this.nodeClassService = new NodeClassService(this.kubeConfig);
 		this.nodePoolService = new NodePoolService(this.kubeConfig);
+		this.replicaSetService = new ReplicaSetService(this.kubeConfig);
 		this.roleService = new RoleService(this.kubeConfig);
+		this.ingressClassService = new IngressClassService(this.kubeConfig);
 		this.storageClassService = new StorageClassService(this.kubeConfig);
 		this.configMapService = new ConfigMapService(this.kubeConfig);
 		this.secretService = new SecretService(this.kubeConfig);
@@ -1178,6 +1236,8 @@ export class KubeService {
 		this.virtualServiceService = new VirtualServiceService(this.kubeConfig);
 		this.gatewayService = new GatewayService(this.kubeConfig);
 		this.destinationRuleService = new DestinationRuleService(this.kubeConfig);
+		this.helmReleaseService = new HelmReleaseService(this.kubeConfig);
+		this.manifestApplyService = new ManifestApplyService(this.kubeConfig);
 	}
 
 	refreshCredentials() {
@@ -1198,7 +1258,9 @@ export class KubeService {
 		this.nodeExecService.refreshCredentials();
 		this.nodeClassService.refreshCredentials();
 		this.nodePoolService.refreshCredentials();
+		this.replicaSetService.refreshCredentials();
 		this.roleService.refreshCredentials();
+		this.ingressClassService.refreshCredentials();
 		this.storageClassService.refreshCredentials();
 		this.configMapService.refreshCredentials();
 		this.secretService.refreshCredentials();
@@ -1208,6 +1270,8 @@ export class KubeService {
 		this.virtualServiceService.refreshCredentials();
 		this.gatewayService.refreshCredentials();
 		this.destinationRuleService.refreshCredentials();
+		this.helmReleaseService.refreshCredentials();
+		this.manifestApplyService.refreshCredentials();
 	}
 
 	private async withCredentialRetry<T>(fn: () => Promise<T>): Promise<T> {
@@ -1259,7 +1323,9 @@ export class KubeService {
 		this.nodeExecService.refreshCredentials();
 		this.nodeClassService.refreshCredentials();
 		this.nodePoolService.refreshCredentials();
+		this.replicaSetService.refreshCredentials();
 		this.roleService.refreshCredentials();
+		this.ingressClassService.refreshCredentials();
 		this.storageClassService.refreshCredentials();
 		this.configMapService.refreshCredentials();
 		this.secretService.refreshCredentials();
@@ -1270,6 +1336,97 @@ export class KubeService {
 		this.virtualServiceService.refreshCredentials();
 		this.gatewayService.refreshCredentials();
 		this.destinationRuleService.refreshCredentials();
+		this.helmReleaseService.refreshCredentials();
+		this.manifestApplyService.refreshCredentials();
+	}
+
+	// Generic manifest apply - delegated to ManifestApplyService
+	async applyManifest(manifestYaml: string) {
+		return this.manifestApplyService.applyManifest(manifestYaml);
+	}
+
+	async checkContextStatus(name: string): Promise<{ reachable: boolean; version?: string; error?: string }> {
+		const contexts = this.kubeConfig.getContexts();
+		if (!contexts.find((ctx) => ctx.name === name)) {
+			return { reachable: false, error: "Context not found" };
+		}
+
+		const tempConfig = new KubeConfig();
+		tempConfig.loadFromDefault();
+		tempConfig.setCurrentContext(name);
+		const api = tempConfig.makeApiClient(CoreV1Api);
+
+		try {
+			const timeoutPromise = new Promise<never>((_, reject) =>
+				setTimeout(() => reject(new Error("Connection timed out")), 5000),
+			);
+			await Promise.race([api.listNamespace({ limit: 1 }), timeoutPromise]);
+			return { reachable: true };
+		} catch (error) {
+			const err = error as { statusCode?: number; message?: string };
+			// 401/403 means the cluster is reachable but credentials are bad/insufficient
+			if (err.statusCode === 401 || err.statusCode === 403) {
+				return { reachable: true, error: `Auth error (${err.statusCode})` };
+			}
+			return { reachable: false, error: err.message ?? "Unknown error" };
+		}
+	}
+
+	deleteContext(name: string) {
+		const contexts = this.kubeConfig.getContexts();
+		const context = contexts.find((ctx) => ctx.name === name);
+		if (!context) {
+			throw new Error(`Context "${name}" not found`);
+		}
+		if (name === this.kubeConfig.getCurrentContext()) {
+			throw new Error(`Cannot delete the currently active context "${name}"`);
+		}
+
+		// Read the kubeconfig file, modify it, and write it back
+		const kubeConfigPath =
+			process.env.KUBECONFIG || join(process.env.HOME || "", ".kube", "config");
+		const rawConfig = readFileSync(kubeConfigPath, "utf-8");
+		const config = yaml.parse(rawConfig);
+
+		// Find which cluster and user this context references
+		const clusterName = context.cluster;
+		const userName = context.user;
+
+		// Remove the context
+		config.contexts = (config.contexts ?? []).filter(
+			(ctx: { name: string }) => ctx.name !== name,
+		);
+
+		// Remove the cluster if no other context references it
+		if (clusterName) {
+			const otherContextsUsingCluster = config.contexts.some(
+				(ctx: { context?: { cluster?: string } }) =>
+					ctx.context?.cluster === clusterName,
+			);
+			if (!otherContextsUsingCluster) {
+				config.clusters = (config.clusters ?? []).filter(
+					(c: { name: string }) => c.name !== clusterName,
+				);
+			}
+		}
+
+		// Remove the user if no other context references it
+		if (userName) {
+			const otherContextsUsingUser = config.contexts.some(
+				(ctx: { context?: { user?: string } }) =>
+					ctx.context?.user === userName,
+			);
+			if (!otherContextsUsingUser) {
+				config.users = (config.users ?? []).filter(
+					(u: { name: string }) => u.name !== userName,
+				);
+			}
+		}
+
+		writeFileSync(kubeConfigPath, yaml.stringify(config), "utf-8");
+
+		// Reload the in-memory config
+		this.refreshCredentials();
 	}
 
 	// Namespace methods - delegated to NamespaceService
@@ -1300,6 +1457,10 @@ export class KubeService {
 
 	async deleteNamespace(name: string) {
 		return this.namespaceService.deleteNamespace(name);
+	}
+
+	async forceDeleteNamespace(name: string) {
+		return this.namespaceService.forceDeleteNamespace(name);
 	}
 
 	async createNamespace(name: string) {
@@ -1558,6 +1719,7 @@ export class KubeService {
 						podIPsCapacity: podIpCapacity,
 						cpuRequestsMillicores: totals.cpuMillicores,
 						memoryRequestsBytes: totals.memoryBytes,
+						memoryLimitsBytes: totals.memoryLimitBytes,
 						totalRestarts,
 						pods,
 						blockers,
@@ -1689,6 +1851,18 @@ export class KubeService {
 				effect: t.effect ?? "",
 			}));
 
+			const nodeClaimRef = node.metadata?.ownerReferences?.find(
+				(ref) => ref.kind === "NodeClaim",
+			);
+			const ownerNodeClaim: NodeOwnerRef | undefined = nodeClaimRef
+				? {
+						kind: nodeClaimRef.kind ?? "NodeClaim",
+						name: nodeClaimRef.name ?? "",
+						apiVersion: nodeClaimRef.apiVersion ?? "",
+						uid: nodeClaimRef.uid ?? "",
+					}
+				: undefined;
+
 			return {
 				...baseItem,
 				labels: node.metadata?.labels ?? {},
@@ -1711,6 +1885,8 @@ export class KubeService {
 				podCIDR: node.spec?.podCIDR ?? undefined,
 				podCIDRs: node.spec?.podCIDRs ?? undefined,
 				providerID: node.spec?.providerID ?? undefined,
+				ownerNodeClaim,
+				finalizers: node.metadata?.finalizers ?? [],
 			};
 		});
 	}
@@ -1720,6 +1896,143 @@ export class KubeService {
 			const node = await this.coreApi.readNode({ name });
 			const manifest = this.sanitizeManifest(node);
 			return JSON.stringify(manifest, null, 2);
+		});
+	}
+
+	async forceDeleteNode(name: string): Promise<void> {
+		return this.withCredentialRetry(async () => {
+			const setHeaderMiddleware = (
+				key: string,
+				value: string,
+			): ObservableMiddleware => ({
+				pre: (request: RequestContext) => {
+					request.setHeaderParam(key, value);
+					return of(request);
+				},
+				post: (response: ResponseContext) => of(response),
+			});
+
+			// Remove finalizers from the node
+			await this.coreApi.patchNode(
+				{
+					name,
+					body: { metadata: { finalizers: null } },
+				},
+				{
+					middleware: [
+						setHeaderMiddleware(
+							"Content-Type",
+							"application/merge-patch+json",
+						),
+					],
+					middlewareMergeStrategy: "append",
+				},
+			);
+
+			// Also remove finalizers from the owning NodeClaim if it exists
+			const node = await this.coreApi.readNode({ name });
+			const nodeClaimRef = node.metadata?.ownerReferences?.find(
+				(ref) => ref.kind === "NodeClaim",
+			);
+			if (nodeClaimRef?.name) {
+				try {
+					await this.customObjectsApi.patchClusterCustomObject(
+						{
+							group: "karpenter.sh",
+							version: "v1",
+							plural: "nodeclaims",
+							name: nodeClaimRef.name,
+							body: { metadata: { finalizers: null } },
+						},
+						{
+							middleware: [
+								setHeaderMiddleware(
+									"Content-Type",
+									"application/merge-patch+json",
+								),
+							],
+							middlewareMergeStrategy: "append",
+						},
+					);
+				} catch (error) {
+					const err = error as { statusCode?: number };
+					if (err.statusCode !== 404) {
+						throw error;
+					}
+				}
+			}
+
+			// Delete the node
+			try {
+				await this.coreApi.deleteNode({
+					name,
+					gracePeriodSeconds: 0,
+				});
+			} catch (error) {
+				const err = error as { statusCode?: number; code?: number };
+				if ((err.statusCode ?? err.code) !== 404) {
+					throw error;
+				}
+			}
+		});
+	}
+
+	async getNodeClaim(name: string): Promise<NodeClaimSummary> {
+		return this.withCredentialRetry(async () => {
+			const response = await this.customObjectsApi.getClusterCustomObject({
+				group: "karpenter.sh",
+				version: "v1",
+				plural: "nodeclaims",
+				name,
+			});
+
+			const obj = response as Record<string, unknown>;
+			const metadata = obj.metadata as Record<string, unknown> | undefined;
+			const spec = obj.spec as Record<string, unknown> | undefined;
+			const status = obj.status as Record<string, unknown> | undefined;
+			const conditions =
+				(status?.conditions as Array<Record<string, unknown>>) ?? [];
+			const nodeClassRef = spec?.nodeClassRef as
+				| Record<string, unknown>
+				| undefined;
+			const requirements =
+				(spec?.requirements as Array<Record<string, unknown>>) ?? [];
+
+			const findRequirement = (key: string) =>
+				requirements.find((r) => r.key === key);
+			const instanceTypeReq = findRequirement(
+				"node.kubernetes.io/instance-type",
+			);
+			const capacityTypeReq = findRequirement("karpenter.sh/capacity-type");
+			const zoneReq = findRequirement("topology.kubernetes.io/zone");
+
+			return {
+				name: (metadata?.name as string) ?? "unknown",
+				nodePoolName:
+					(metadata?.labels as Record<string, string> | undefined)?.[
+						"karpenter.sh/nodepool"
+					] ?? undefined,
+				instanceType: instanceTypeReq
+					? ((instanceTypeReq.values as string[]) ?? [])[0]
+					: (status?.instanceType as string) ?? undefined,
+				capacityType: capacityTypeReq
+					? ((capacityTypeReq.values as string[]) ?? [])[0]
+					: (status?.capacityType as string) ?? undefined,
+				zone: zoneReq
+					? ((zoneReq.values as string[]) ?? [])[0]
+					: undefined,
+				conditions: conditions.map((c) => ({
+					type: (c.type as string) ?? "",
+					status: (c.status as string) ?? "",
+					reason: c.reason as string | undefined,
+					message: c.message as string | undefined,
+					lastTransitionTime: c.lastTransitionTime as string | undefined,
+				})),
+				creationTimestamp: metadata?.creationTimestamp
+					? new Date(metadata.creationTimestamp as string).toISOString()
+					: undefined,
+				finalizers: (metadata?.finalizers as string[]) ?? [],
+			};
 		});
 	}
 
@@ -2221,6 +2534,7 @@ export class KubeService {
 
 				const { cpuMillicores, memoryBytes } =
 					this.calculatePodRequestTotals(pod);
+				const memoryLimitBytes = this.calculatePodMemoryLimits(pod);
 				const labels = pod.metadata?.labels ?? {};
 				const selfAntiAffinity = this.extractSelfAntiAffinity(pod, labels);
 				const topologySpread = this.extractTopologySpread(pod, labels);
@@ -2239,6 +2553,7 @@ export class KubeService {
 					namespace: pod.metadata?.namespace ?? "default",
 					cpuMillicores,
 					memoryBytes,
+					memoryLimitBytes,
 					cpuRequests:
 						cpuMillicores > 0
 							? this.formatCpuQuantity(cpuMillicores)
@@ -2512,14 +2827,16 @@ export class KubeService {
 	private aggregatePodResources(pods: NodePodDetail[]): {
 		cpuMillicores: number;
 		memoryBytes: number;
+		memoryLimitBytes: number;
 	} {
 		return pods.reduce(
 			(acc, pod) => {
 				acc.cpuMillicores += pod.cpuMillicores;
 				acc.memoryBytes += pod.memoryBytes;
+				acc.memoryLimitBytes += pod.memoryLimitBytes;
 				return acc;
 			},
-			{ cpuMillicores: 0, memoryBytes: 0 },
+			{ cpuMillicores: 0, memoryBytes: 0, memoryLimitBytes: 0 },
 		);
 	}
 
@@ -3009,6 +3326,16 @@ export class KubeService {
 		});
 	}
 
+	async forceDeletePod(namespace: string, podName: string): Promise<void> {
+		return this.withCredentialRetry(async () => {
+			await this.coreApi.deleteNamespacedPod({
+				name: podName,
+				namespace,
+				gracePeriodSeconds: 0,
+			});
+		});
+	}
+
 	async evictPod(namespace: string, podName: string): Promise<void> {
 		return this.withCredentialRetry(async () => {
 			await this.coreApi.deleteNamespacedPod({
@@ -3238,7 +3565,8 @@ export class KubeService {
 		const creationTimestamp = pod.metadata?.creationTimestamp
 			? new Date(pod.metadata.creationTimestamp).toISOString()
 			: undefined;
-		const { cpuRequests, memoryRequests } = this.calculatePodRequests(pod);
+		const { cpuRequests, memoryRequests, memoryLimits } =
+			this.calculatePodRequests(pod);
 		return {
 			name: pod.metadata?.name ?? "unknown",
 			namespace: pod.metadata?.namespace ?? "default",
@@ -3251,6 +3579,7 @@ export class KubeService {
 			creationTimestamp,
 			cpuRequests,
 			memoryRequests,
+			memoryLimits,
 			cpuUsage: usage?.cpu,
 			memoryUsage: usage?.memory,
 		};
@@ -3303,6 +3632,7 @@ export class KubeService {
 			podIPsCapacity?: number;
 			cpuRequestsMillicores?: number;
 			memoryRequestsBytes?: number;
+			memoryLimitsBytes?: number;
 			totalRestarts?: number;
 			pods?: NodeListItem["pods"];
 			blockers?: NodeBlocker[];
@@ -3370,6 +3700,12 @@ export class KubeService {
 			options?.memoryRequestsBytes && options.memoryRequestsBytes > 0
 				? this.formatMemoryQuantity(options.memoryRequestsBytes)
 				: undefined;
+		const memoryLimitsBytes = options?.memoryLimitsBytes ?? 0;
+		const memoryLimits =
+			memoryLimitsBytes > 0 &&
+			memoryLimitsBytes !== (options?.memoryRequestsBytes ?? 0)
+				? this.formatMemoryQuantity(memoryLimitsBytes)
+				: undefined;
 
 		return {
 			name: node.metadata?.name ?? "unknown",
@@ -3398,6 +3734,7 @@ export class KubeService {
 			podIPsCapacity: options?.podIPsCapacity,
 			cpuRequests,
 			memoryRequests,
+			memoryLimits,
 			totalRestarts: options?.totalRestarts ?? 0,
 			pods: options?.pods ?? [],
 			blockers: options?.blockers ?? [],
@@ -3602,16 +3939,48 @@ export class KubeService {
 		};
 	}
 
+	private calculatePodMemoryLimits(pod: V1Pod): number {
+		const containers = pod.spec?.containers ?? [];
+		const initContainers = pod.spec?.initContainers ?? [];
+
+		const containerMemoryBytes = containers.reduce((acc, container) => {
+			const limit = container.resources?.limits?.memory;
+			return acc + this.parseMemoryQuantity(limit);
+		}, 0);
+		const initContainerMemoryBytes = initContainers.reduce(
+			(max, container) => {
+				const limit = container.resources?.limits?.memory;
+				return Math.max(max, this.parseMemoryQuantity(limit));
+			},
+			0,
+		);
+
+		const overheadMemoryBytes = this.parseMemoryQuantity(
+			pod.spec?.overhead?.memory,
+		);
+
+		return (
+			Math.max(containerMemoryBytes, initContainerMemoryBytes) +
+			overheadMemoryBytes
+		);
+	}
+
 	private calculatePodRequests(pod: V1Pod): {
 		cpuRequests?: string;
 		memoryRequests?: string;
+		memoryLimits?: string;
 	} {
 		const { cpuMillicores, memoryBytes } = this.calculatePodRequestTotals(pod);
+		const memoryLimitBytes = this.calculatePodMemoryLimits(pod);
 		return {
 			cpuRequests:
 				cpuMillicores > 0 ? this.formatCpuQuantity(cpuMillicores) : undefined,
 			memoryRequests:
 				memoryBytes > 0 ? this.formatMemoryQuantity(memoryBytes) : undefined,
+			memoryLimits:
+				memoryLimitBytes > 0 && memoryLimitBytes !== memoryBytes
+					? this.formatMemoryQuantity(memoryLimitBytes)
+					: undefined,
 		};
 	}
 
@@ -4608,11 +4977,37 @@ export class KubeService {
 			},
 		};
 
-		await this.appsApi.patchNamespacedDaemonSet({
-			name: daemonSetName,
-			namespace,
-			body: patchBody,
-		});
+		function setHeaderMiddleware(
+			key: string,
+			value: string,
+		): ObservableMiddleware {
+			return {
+				pre: (request: RequestContext) => {
+					request.setHeaderParam(key, value);
+					return of(request);
+				},
+				post: (response: ResponseContext) => {
+					return of(response);
+				},
+			};
+		}
+
+		await this.appsApi.patchNamespacedDaemonSet(
+			{
+				name: daemonSetName,
+				namespace,
+				body: patchBody,
+			},
+			{
+				middleware: [
+					setHeaderMiddleware(
+						"Content-Type",
+						"application/strategic-merge-patch+json",
+					),
+				],
+				middlewareMergeStrategy: "append",
+			},
+		);
 	}
 
 	async streamDaemonSets(
@@ -4861,11 +5256,37 @@ export class KubeService {
 			},
 		};
 
-		await this.appsApi.patchNamespacedStatefulSet({
-			name: statefulSetName,
-			namespace,
-			body: patchBody,
-		});
+		function setHeaderMiddleware(
+			key: string,
+			value: string,
+		): ObservableMiddleware {
+			return {
+				pre: (request: RequestContext) => {
+					request.setHeaderParam(key, value);
+					return of(request);
+				},
+				post: (response: ResponseContext) => {
+					return of(response);
+				},
+			};
+		}
+
+		await this.appsApi.patchNamespacedStatefulSet(
+			{
+				name: statefulSetName,
+				namespace,
+				body: patchBody,
+			},
+			{
+				middleware: [
+					setHeaderMiddleware(
+						"Content-Type",
+						"application/strategic-merge-patch+json",
+					),
+				],
+				middlewareMergeStrategy: "append",
+			},
+		);
 	}
 
 	async scaleStatefulSet(
@@ -6483,6 +6904,28 @@ export class KubeService {
 		return this.secretService.streamSecrets(namespace, onData, onError, signal);
 	}
 
+	// Helm release methods
+	async listHelmReleases(namespace: string) {
+		return this.helmReleaseService.listHelmReleases(namespace);
+	}
+
+	async getHelmRelease(namespace: string, releaseName: string) {
+		return this.helmReleaseService.getHelmRelease(namespace, releaseName);
+	}
+
+	async getHelmReleaseManifest(namespace: string, releaseName: string) {
+		return this.helmReleaseService.getHelmReleaseManifest(namespace, releaseName);
+	}
+
+	async streamHelmReleases(
+		namespace: string,
+		onData: (data: string) => void,
+		onError: (err: unknown) => void,
+		signal?: AbortSignal,
+	) {
+		return this.helmReleaseService.streamHelmReleases(namespace, onData, onError, signal);
+	}
+
 	// HPA methods
 	async listHpas(namespace: string) {
 		return this.hpaService.listHpas(namespace);
@@ -7758,6 +8201,66 @@ export class KubeService {
 		signal?: AbortSignal,
 	) {
 		return this.storageClassService.streamStorageClasses(
+			onData,
+			onError,
+			signal,
+		);
+	}
+
+	// IngressClass methods - delegated to IngressClassService
+	async listIngressClasses() {
+		return this.ingressClassService.listIngressClasses();
+	}
+
+	async getIngressClass(name: string) {
+		return this.ingressClassService.getIngressClass(name);
+	}
+
+	async getIngressClassManifest(name: string) {
+		return this.ingressClassService.getIngressClassManifest(name);
+	}
+
+	async deleteIngressClass(name: string) {
+		return this.ingressClassService.deleteIngressClass(name);
+	}
+
+	async streamIngressClasses(
+		onData: (data: string) => void,
+		onError: (err: unknown) => void,
+		signal?: AbortSignal,
+	) {
+		return this.ingressClassService.streamIngressClasses(
+			onData,
+			onError,
+			signal,
+		);
+	}
+
+	// ReplicaSet methods - delegated to ReplicaSetService
+	async listReplicaSets(namespace: string) {
+		return this.replicaSetService.listReplicaSets(namespace);
+	}
+
+	async getReplicaSet(namespace: string, name: string) {
+		return this.replicaSetService.getReplicaSet(namespace, name);
+	}
+
+	async getReplicaSetManifest(namespace: string, name: string) {
+		return this.replicaSetService.getReplicaSetManifest(namespace, name);
+	}
+
+	async deleteReplicaSet(namespace: string, name: string) {
+		return this.replicaSetService.deleteReplicaSet(namespace, name);
+	}
+
+	async streamReplicaSets(
+		namespace: string,
+		onData: (data: string) => void,
+		onError: (err: unknown) => void,
+		signal?: AbortSignal,
+	) {
+		return this.replicaSetService.streamReplicaSets(
+			namespace,
 			onData,
 			onError,
 			signal,

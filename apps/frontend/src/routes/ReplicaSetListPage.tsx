@@ -1,40 +1,40 @@
 import { batch, createEffect, createSignal, Match, onCleanup, Show, Switch } from 'solid-js';
 import { useNavigate, useParams } from '@solidjs/router';
 import ManifestViewer from '../components/ManifestViewer';
-import ServiceAccountTable from '../components/ServiceAccountTable';
-import ServiceAccountInfoPanel from '../components/ServiceAccountInfoPanel';
+import ReplicaSetTable from '../components/ReplicaSetTable';
+import ReplicaSetInfoPanel from '../components/ReplicaSetInfoPanel';
 import ResourceActions, { type ResourceAction } from '../components/ResourceActions';
 import { contextStore } from '../stores/contextStore';
 import {
   ApiError,
-  deleteServiceAccount,
-  fetchServiceAccount,
-  fetchServiceAccountManifest,
-  fetchServiceAccounts,
-  subscribeToServiceAccountEvents,
-  type ServiceAccountDetail,
-  type ServiceAccountListItem,
-  type ServiceAccountWatchEvent
+  deleteReplicaSet,
+  fetchReplicaSet,
+  fetchReplicaSetManifest,
+  fetchReplicaSets,
+  subscribeToReplicaSetEvents,
+  type ReplicaSetDetail,
+  type ReplicaSetListItem,
+  type ReplicaSetWatchEvent
 } from '../lib/api';
 
-const applyServiceAccountWatchEvent = (serviceAccounts: ServiceAccountListItem[], event: ServiceAccountWatchEvent): ServiceAccountListItem[] => {
+const applyReplicaSetWatchEvent = (replicaSets: ReplicaSetListItem[], event: ReplicaSetWatchEvent): ReplicaSetListItem[] => {
   const { type, object } = event;
   switch (type) {
     case 'ADDED':
-      return [...serviceAccounts.filter((item) => item.name !== object.name), object];
+      return [...replicaSets.filter((rs) => rs.name !== object.name), object];
     case 'MODIFIED':
-      return serviceAccounts.map((item) => (item.name === object.name ? object : item));
+      return replicaSets.map((rs) => (rs.name === object.name ? object : rs));
     case 'DELETED':
-      return serviceAccounts.filter((item) => item.name !== object.name);
+      return replicaSets.filter((rs) => rs.name !== object.name);
     default:
-      return serviceAccounts;
+      return replicaSets;
   }
 };
 
-const sortServiceAccounts = (serviceAccounts: ServiceAccountListItem[]) =>
-  [...serviceAccounts].sort((a, b) => a.name.localeCompare(b.name));
+const sortReplicaSets = (replicaSets: ReplicaSetListItem[]) =>
+  [...replicaSets].sort((a, b) => a.name.localeCompare(b.name));
 
-const ServiceAccountListPage = () => {
+const ReplicaSetListPage = () => {
   const params = useParams<{ context: string; namespace: string; resourceName?: string; tab?: string }>();
   const navigate = useNavigate();
 
@@ -43,17 +43,17 @@ const ServiceAccountListPage = () => {
   const resourceName = () => (params.resourceName ? decodeURIComponent(params.resourceName) : undefined);
   const tab = () => params.tab || 'info';
 
-  const [serviceAccounts, setServiceAccounts] = createSignal<ServiceAccountListItem[]>([]);
-  const [serviceAccountsLoading, setServiceAccountsLoading] = createSignal(false);
-  const [serviceAccountsError, setServiceAccountsError] = createSignal<string>('');
+  const [replicaSets, setReplicaSets] = createSignal<ReplicaSetListItem[]>([]);
+  const [replicaSetsLoading, setReplicaSetsLoading] = createSignal(false);
+  const [replicaSetsError, setReplicaSetsError] = createSignal<string>('');
 
-  const [serviceAccountDetail, setServiceAccountDetail] = createSignal<ServiceAccountDetail | undefined>();
-  const [serviceAccountDetailLoading, setServiceAccountDetailLoading] = createSignal(false);
+  const [replicaSetDetail, setReplicaSetDetail] = createSignal<ReplicaSetDetail | undefined>();
+  const [replicaSetDetailLoading, setReplicaSetDetailLoading] = createSignal(false);
   const [manifest, setManifest] = createSignal<string>('');
 
   const [contextError, setContextError] = createSignal<string>('');
 
-  let unsubscribeServiceAccountStream: (() => void) | undefined;
+  let unsubscribeReplicaSetStream: (() => void) | undefined;
 
   createEffect(() => {
     const ctx = context();
@@ -92,43 +92,42 @@ const ServiceAccountListPage = () => {
     }
   });
 
-  const loadServiceAccounts = async (ns: string) => {
-    setServiceAccountsLoading(true);
-    setServiceAccountsError('');
+  const loadReplicaSets = async (ns: string) => {
+    setReplicaSetsLoading(true);
+    setReplicaSetsError('');
     try {
-      const items = await fetchServiceAccounts(ns);
-      const sorted = sortServiceAccounts(items);
-      setServiceAccounts(sorted);
+      const items = await fetchReplicaSets(ns);
+      setReplicaSets(sortReplicaSets(items));
     } catch (error) {
-      console.error('Failed to load service accounts', error);
-      setServiceAccounts([]);
+      console.error('Failed to load replicasets', error);
+      setReplicaSets([]);
       if (error instanceof ApiError) {
-        setServiceAccountsError(error.message);
+        setReplicaSetsError(error.message);
       } else {
-        setServiceAccountsError('Failed to load service accounts');
+        setReplicaSetsError('Failed to load replicasets');
       }
     } finally {
-      setServiceAccountsLoading(false);
+      setReplicaSetsLoading(false);
     }
   };
 
-  const loadServiceAccountDetail = async (ns: string, name: string) => {
-    setServiceAccountDetailLoading(true);
+  const loadReplicaSetDetail = async (ns: string, name: string) => {
+    setReplicaSetDetailLoading(true);
     try {
       const [detail, manifestYaml] = await Promise.all([
-        fetchServiceAccount(ns, name),
-        fetchServiceAccountManifest(ns, name)
+        fetchReplicaSet(ns, name),
+        fetchReplicaSetManifest(ns, name)
       ]);
       batch(() => {
-        setServiceAccountDetail(detail);
+        setReplicaSetDetail(detail);
         setManifest(manifestYaml);
       });
     } catch (error) {
-      console.error('Failed to load service account detail', error);
-      setServiceAccountDetail(undefined);
+      console.error('Failed to load replicaset detail', error);
+      setReplicaSetDetail(undefined);
       setManifest('');
     } finally {
-      setServiceAccountDetailLoading(false);
+      setReplicaSetDetailLoading(false);
     }
   };
 
@@ -139,23 +138,23 @@ const ServiceAccountListPage = () => {
     if (!ns || contextError()) return;
     if (contextStore.activeContext() !== ctx) return;
 
-    setServiceAccountDetail(undefined);
+    setReplicaSetDetail(undefined);
     setManifest('');
 
-    void loadServiceAccounts(ns);
+    void loadReplicaSets(ns);
 
-    if (unsubscribeServiceAccountStream) {
-      unsubscribeServiceAccountStream();
+    if (unsubscribeReplicaSetStream) {
+      unsubscribeReplicaSetStream();
     }
 
-    unsubscribeServiceAccountStream = subscribeToServiceAccountEvents(
+    unsubscribeReplicaSetStream = subscribeToReplicaSetEvents(
       ns,
       (event) => {
-        setServiceAccounts((prev) => sortServiceAccounts(applyServiceAccountWatchEvent(prev, event)));
+        setReplicaSets((prev) => sortReplicaSets(applyReplicaSetWatchEvent(prev, event)));
       },
       (error) => {
-        if (error) console.error('ServiceAccount stream error', error);
-        setServiceAccountsError(error?.message ?? '');
+        if (error) console.error('ReplicaSet stream error', error);
+        setReplicaSetsError(error?.message ?? '');
       }
     );
   });
@@ -168,43 +167,43 @@ const ServiceAccountListPage = () => {
     if (!ns || !name || contextError()) return;
     if (contextStore.activeContext() !== ctx) return;
 
-    void loadServiceAccountDetail(ns, name);
+    void loadReplicaSetDetail(ns, name);
   });
 
   onCleanup(() => {
-    unsubscribeServiceAccountStream?.();
+    unsubscribeReplicaSetStream?.();
   });
 
-  const handleServiceAccountSelect = (serviceAccount: ServiceAccountListItem) => {
+  const handleReplicaSetSelect = (rs: ReplicaSetListItem) => {
     const currentTab = tab();
-    navigate(`/${encodeURIComponent(context())}/${encodeURIComponent(namespace())}/serviceaccounts/${encodeURIComponent(serviceAccount.name)}/${currentTab}`);
+    navigate(`/${encodeURIComponent(context())}/${encodeURIComponent(namespace())}/replicasets/${encodeURIComponent(rs.name)}/${currentTab}`);
   };
 
   const handleTabChange = (tabName: string) => {
     if (resourceName()) {
-      navigate(`/${encodeURIComponent(context())}/${encodeURIComponent(namespace())}/serviceaccounts/${encodeURIComponent(resourceName()!)}/${tabName}`);
+      navigate(`/${encodeURIComponent(context())}/${encodeURIComponent(namespace())}/replicasets/${encodeURIComponent(resourceName()!)}/${tabName}`);
     }
   };
 
-  const handleDeleteServiceAccount = async () => {
+  const handleDeleteReplicaSet = async () => {
     const name = resourceName();
     const ns = namespace();
     if (!name || !ns) return;
 
     try {
-      await deleteServiceAccount(ns, name);
-      navigate(`/${encodeURIComponent(context())}/${encodeURIComponent(ns)}/serviceaccounts`);
+      await deleteReplicaSet(ns, name);
+      navigate(`/${encodeURIComponent(context())}/${encodeURIComponent(ns)}/replicasets`);
     } catch (error) {
-      console.error('Failed to delete service account', error);
+      console.error('Failed to delete replicaset', error);
       if (error instanceof ApiError) {
-        setServiceAccountsError(error.message);
+        setReplicaSetsError(error.message);
       } else {
-        setServiceAccountsError('Failed to delete service account');
+        setReplicaSetsError('Failed to delete replicaset');
       }
     }
   };
 
-  const serviceAccountActions = (): ResourceAction[] => {
+  const replicaSetActions = (): ResourceAction[] => {
     if (!resourceName()) return [];
 
     return [
@@ -212,10 +211,10 @@ const ServiceAccountListPage = () => {
         label: 'Delete',
         variant: 'error',
         icon: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
-        onClick: handleDeleteServiceAccount,
+        onClick: handleDeleteReplicaSet,
         confirm: {
-          title: 'Delete Service Account',
-          message: `Are you sure you want to delete service account "${resourceName()}"? This action cannot be undone.`
+          title: 'Delete ReplicaSet',
+          message: `Are you sure you want to delete replicaset "${resourceName()}"? This will delete all managed pods. This action cannot be undone.`
         }
       }
     ];
@@ -224,11 +223,21 @@ const ServiceAccountListPage = () => {
   if (contextError()) {
     return (
       <main class="p-6">
-        <div class="alert alert-error max-w-xl">
-          <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span>{contextError()}</span>
+        <div class="flex items-center justify-center min-h-[50vh]">
+          <div class="card bg-base-200 shadow-xl max-w-md">
+            <div class="card-body text-center">
+              <h2 class="card-title justify-center text-error">Route Not Found</h2>
+              <p class="opacity-70">{contextError()}</p>
+              <div class="card-actions justify-center mt-4">
+                <button
+                  class="btn btn-primary"
+                  onClick={() => navigate('/', { replace: true })}
+                >
+                  Go to Default View
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </main>
     );
@@ -237,23 +246,23 @@ const ServiceAccountListPage = () => {
   return (
     <main class="p-6">
       <div class="flex flex-col gap-6">
-        <Show when={serviceAccountsError()}>
+        <Show when={replicaSetsError()}>
           <div role="alert" class="alert alert-error">
             <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span>{serviceAccountsError()}</span>
+            <span>{replicaSetsError()}</span>
           </div>
         </Show>
         <section class="grid grid-cols-1 gap-6 xl:grid-cols-2 h-resource-panel">
           <div class="card bg-base-200/30 shadow-lg flex flex-col overflow-hidden">
             <div class="card-body flex-1 overflow-hidden">
               <div class="overflow-y-auto h-full">
-                <ServiceAccountTable
-                  serviceAccounts={serviceAccounts()}
-                  selectedServiceAccount={resourceName()}
-                  loading={serviceAccountsLoading()}
-                  onSelect={handleServiceAccountSelect}
+                <ReplicaSetTable
+                  replicaSets={replicaSets()}
+                  selectedReplicaSet={resourceName()}
+                  loading={replicaSetsLoading()}
+                  onSelect={handleReplicaSetSelect}
                 />
               </div>
             </div>
@@ -278,16 +287,16 @@ const ServiceAccountListPage = () => {
                     Definition
                   </button>
                 </div>
-                <ResourceActions actions={serviceAccountActions()} />
+                <ResourceActions actions={replicaSetActions()} />
               </div>
               <div class="divider my-0 flex-shrink-0" />
               <div class="p-6 flex-1 overflow-y-auto">
                 <Switch>
                   <Match when={tab() === 'info'}>
-                    <ServiceAccountInfoPanel serviceAccount={serviceAccountDetail()} loading={serviceAccountDetailLoading()} />
+                    <ReplicaSetInfoPanel replicaSet={replicaSetDetail()} loading={replicaSetDetailLoading()} />
                   </Match>
                   <Match when={tab() === 'manifest'}>
-                    <ManifestViewer manifest={manifest()} loading={serviceAccountDetailLoading()} />
+                    <ManifestViewer manifest={manifest()} loading={replicaSetDetailLoading()} />
                   </Match>
                 </Switch>
               </div>
@@ -299,4 +308,4 @@ const ServiceAccountListPage = () => {
   );
 };
 
-export default ServiceAccountListPage;
+export default ReplicaSetListPage;

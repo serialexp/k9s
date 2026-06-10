@@ -88,6 +88,7 @@ export interface NodeListItem {
   podIPsCapacity?: number;
   cpuRequests?: string;
   memoryRequests?: string;
+  memoryLimits?: string;
   totalRestarts: number;
   blockers?: NodeBlocker[];
   pods: Array<{
@@ -108,6 +109,30 @@ export interface NodeCondition {
   message?: string;
   lastHeartbeatTime?: string;
   lastTransitionTime?: string;
+}
+
+export interface NodeOwnerRef {
+  kind: string;
+  name: string;
+  apiVersion: string;
+  uid: string;
+}
+
+export interface NodeClaimSummary {
+  name: string;
+  nodePoolName?: string;
+  instanceType?: string;
+  capacityType?: string;
+  zone?: string;
+  conditions: Array<{
+    type: string;
+    status: string;
+    reason?: string;
+    message?: string;
+    lastTransitionTime?: string;
+  }>;
+  creationTimestamp?: string;
+  finalizers: string[];
 }
 
 export interface NodeDetail extends NodeListItem {
@@ -138,6 +163,8 @@ export interface NodeDetail extends NodeListItem {
   podCIDR?: string;
   podCIDRs?: string[];
   providerID?: string;
+  ownerNodeClaim?: NodeOwnerRef;
+  finalizers: string[];
 }
 
 export interface NodeEvent {
@@ -199,6 +226,7 @@ export interface PodListItem {
   creationTimestamp?: string;
   cpuRequests?: string;
   memoryRequests?: string;
+  memoryLimits?: string;
   cpuUsage?: string;
   memoryUsage?: string;
 }
@@ -260,6 +288,35 @@ export interface PodStatus {
   hostIP?: string;
   startTime?: string;
   qosClass?: string;
+}
+
+export interface ReplicaSetListItem {
+  name: string;
+  namespace: string;
+  desiredReplicas: number;
+  readyReplicas: number;
+  availableReplicas: number;
+  ownerReference?: string;
+  images: string[];
+  creationTimestamp?: string;
+}
+
+export interface ReplicaSetDetail extends ReplicaSetListItem {
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  selector: Record<string, string>;
+  conditions: Array<{
+    type: string;
+    status: string;
+    lastTransitionTime?: string;
+    reason?: string;
+    message?: string;
+  }>;
+}
+
+export interface ReplicaSetWatchEvent {
+  type: 'ADDED' | 'MODIFIED' | 'DELETED' | string;
+  object: ReplicaSetListItem;
 }
 
 export interface DeploymentListItem {
@@ -1195,6 +1252,30 @@ export interface SecretWatchEvent {
   object: SecretListItem;
 }
 
+export interface HelmReleaseListItem {
+  name: string;
+  namespace: string;
+  status: string;
+  revision: number;
+  chart: string;
+  chartVersion: string;
+  appVersion: string;
+  updated?: string;
+}
+
+export interface HelmReleaseDetail extends HelmReleaseListItem {
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  description: string;
+  notes: string;
+  values: string;
+}
+
+export interface HelmReleaseWatchEvent {
+  type: 'ADDED' | 'MODIFIED' | 'DELETED' | string;
+  object: HelmReleaseListItem;
+}
+
 export interface HpaWatchEvent {
   type: 'ADDED' | 'MODIFIED' | 'DELETED' | string;
   object: HpaListItem;
@@ -1231,6 +1312,30 @@ export interface PersistentVolumeClaimDetail extends PersistentVolumeClaimListIt
 export interface PersistentVolumeClaimWatchEvent {
   type: 'ADDED' | 'MODIFIED' | 'DELETED' | string;
   object: PersistentVolumeClaimListItem;
+}
+
+export interface IngressClassListItem {
+  name: string;
+  controller?: string;
+  isDefault: boolean;
+  creationTimestamp?: string;
+}
+
+export interface IngressClassDetail extends IngressClassListItem {
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  parameters?: {
+    apiGroup?: string;
+    kind?: string;
+    name?: string;
+    namespace?: string;
+    scope?: string;
+  };
+}
+
+export interface IngressClassWatchEvent {
+  type: 'ADDED' | 'MODIFIED' | 'DELETED' | string;
+  object: IngressClassListItem;
 }
 
 export interface StorageClassListItem {
@@ -1470,6 +1575,98 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Opens an SSE (EventSource) stream that automatically reconnects with
+ * exponential backoff (1s -> 30s cap, with jitter).
+ *
+ * Why this exists: a plain EventSource that is `close()`d on error never
+ * reconnects, so a transient auth failure (e.g. an expired AWS/EKS token on
+ * page load) leaves the stream permanently dead until a manual page refresh.
+ * This helper keeps retrying, so once credentials are restored (e.g. after
+ * `aws sso login`) the stream recovers on its own.
+ *
+ * Error reporting:
+ *  - `onError(ApiError)` is called when the backend emits an `event: error`
+ *    SSE frame (has data) or when the transport drops (no data).
+ *  - `onError(null)` is called once when a stream that had previously errored
+ *    successfully receives data again, signalling recovery so consumers can
+ *    clear any "can't connect" banner.
+ */
+function createReconnectingEventSource<T>(
+  url: string,
+  onEvent: (event: T) => void,
+  onError?: (error: ApiError | null) => void
+): () => void {
+  let eventSource: EventSource | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let attempt = 0;
+  let closed = false;
+  let hadError = false;
+
+  const scheduleReconnect = () => {
+    if (closed || reconnectTimer) return;
+    const base = Math.min(30_000, 1000 * 2 ** attempt);
+    const delay = base + Math.random() * 0.3 * base; // jitter to avoid thundering herd
+    attempt += 1;
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      connect();
+    }, delay);
+  };
+
+  const connect = () => {
+    if (closed) return;
+    const source = new EventSource(url);
+    eventSource = source;
+
+    source.onmessage = (event) => {
+      attempt = 0;
+      if (hadError) {
+        hadError = false;
+        onError?.(null); // recovered -> let consumers clear their error state
+      }
+      try {
+        onEvent(JSON.parse(event.data) as T);
+      } catch (error) {
+        console.error('Failed to parse watch event', error);
+      }
+    };
+
+    // Per the SSE spec, named `event: error` frames and native transport
+    // errors both dispatch as 'error'-type events; distinguish by `data`.
+    source.addEventListener('error', (event) => {
+      const data = 'data' in event ? (event as MessageEvent).data : null;
+      if (data) {
+        try {
+          const errorData = JSON.parse(data) as { message: string; statusCode?: number };
+          hadError = true;
+          onError?.(
+            new ApiError(errorData.message, errorData.statusCode || 500, errorData.statusCode === 401)
+          );
+        } catch {
+          console.error('Watch stream error', event);
+        }
+      } else {
+        hadError = true;
+        onError?.(new ApiError('Connection lost. Reconnecting…', 0, false));
+      }
+      source.close();
+      scheduleReconnect();
+    });
+  };
+
+  connect();
+
+  return () => {
+    closed = true;
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    eventSource?.close();
+  };
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: HeadersInit = {};
 
@@ -1504,6 +1701,25 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+export interface AppliedManifest {
+  apiVersion: string;
+  kind: string;
+  name: string;
+  namespace?: string;
+}
+
+/**
+ * Apply an edited resource manifest in place using Replace (kubectl edit)
+ * semantics. The target resource is derived from the manifest's own
+ * apiVersion/kind/metadata, so this works for any resource type.
+ */
+export async function applyManifest(manifestYaml: string): Promise<AppliedManifest> {
+  return apiFetch<AppliedManifest>(`/manifest`, {
+    method: 'PUT',
+    body: JSON.stringify({ manifest: manifestYaml })
+  });
+}
+
 export async function fetchContexts(): Promise<ContextInfo[]> {
   const data = await apiFetch<{ contexts: ContextInfo[] }>(`/contexts`);
   return data.contexts;
@@ -1518,6 +1734,21 @@ export async function selectContext(name: string): Promise<void> {
   await apiFetch<void>(`/contexts/select`, {
     method: 'POST',
     body: JSON.stringify({ name })
+  });
+}
+
+export interface ContextStatus {
+  reachable: boolean;
+  error?: string;
+}
+
+export async function checkContextStatus(name: string): Promise<ContextStatus> {
+  return apiFetch<ContextStatus>(`/contexts/${encodeURIComponent(name)}/status`);
+}
+
+export async function deleteContext(name: string): Promise<void> {
+  await apiFetch<void>(`/contexts/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
   });
 }
 
@@ -1554,6 +1785,12 @@ export async function deleteNamespace(name: string): Promise<void> {
   });
 }
 
+export async function forceDeleteNamespace(name: string): Promise<void> {
+  await apiFetch<void>(`/namespaces/${encodeURIComponent(name)}?force=true`, {
+    method: 'DELETE'
+  });
+}
+
 export async function createNamespace(name: string): Promise<void> {
   await apiFetch<{ name: string }>(`/namespaces`, {
     method: 'POST',
@@ -1563,86 +1800,24 @@ export async function createNamespace(name: string): Promise<void> {
 
 export function subscribeToNamespaceEvents(
   onEvent: (event: NamespaceWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/namespaces`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as NamespaceWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse namespace watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('Namespace watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<NamespaceWatchEvent>(
+    `${EVENTS_BASE}/namespaces`,
+    onEvent,
+    onError
+  );
 }
 
 export function subscribeToNamespaceFullEvents(
   onEvent: (event: NamespaceFullWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/namespaces/full`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as NamespaceFullWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse namespace watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('Namespace watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<NamespaceFullWatchEvent>(
+    `${EVENTS_BASE}/namespaces/full`,
+    onEvent,
+    onError
+  );
 }
 
 export interface NodeListResponse {
@@ -1698,6 +1873,16 @@ export async function drainNode(name: string): Promise<{ evictedPods: string[] }
   return response.json();
 }
 
+export async function forceDeleteNode(name: string): Promise<void> {
+  await apiFetch<void>(`/nodes/${encodeURIComponent(name)}/force`, {
+    method: 'DELETE'
+  });
+}
+
+export async function fetchNodeClaim(name: string): Promise<NodeClaimSummary> {
+  return apiFetch<NodeClaimSummary>(`/nodeclaims/${encodeURIComponent(name)}`);
+}
+
 export async function fetchNamespaceSummaries(): Promise<NamespaceSummary[]> {
   const data = await apiFetch<{ items: NamespaceSummary[] }>(`/namespace-summaries`);
   return data.items;
@@ -1735,48 +1920,23 @@ export async function fetchPodStatus(namespace: string, pod: string): Promise<Po
 export function subscribeToPodEvents(
   namespace: string,
   onEvent: (event: PodWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/pods?namespace=${encodeURIComponent(namespace)}`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as PodWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse pod watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('Pod watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<PodWatchEvent>(
+    `${EVENTS_BASE}/pods?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 export async function deletePod(namespace: string, pod: string): Promise<void> {
   await apiFetch<void>(`/namespaces/${encodeURIComponent(namespace)}/pods/${encodeURIComponent(pod)}`, {
+    method: 'DELETE'
+  });
+}
+
+export async function forceDeletePod(namespace: string, pod: string): Promise<void> {
+  await apiFetch<void>(`/namespaces/${encodeURIComponent(namespace)}/pods/${encodeURIComponent(pod)}/force`, {
     method: 'DELETE'
   });
 }
@@ -1885,44 +2045,13 @@ export async function fetchDeploymentStatus(namespace: string, deployment: strin
 export function subscribeToDeploymentEvents(
   namespace: string,
   onEvent: (event: DeploymentWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/deployments?namespace=${encodeURIComponent(namespace)}`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as DeploymentWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse deployment watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('Deployment watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<DeploymentWatchEvent>(
+    `${EVENTS_BASE}/deployments?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 export async function deleteDeployment(namespace: string, deployment: string): Promise<void> {
@@ -1989,50 +2118,58 @@ export async function fetchRolloutStatus(namespace: string, rollout: string): Pr
 export function subscribeToRolloutEvents(
   namespace: string,
   onEvent: (event: RolloutWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/rollouts?namespace=${encodeURIComponent(namespace)}`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as RolloutWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse rollout watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('Rollout watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<RolloutWatchEvent>(
+    `${EVENTS_BASE}/rollouts?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 export async function deleteRollout(namespace: string, rollout: string): Promise<void> {
   await apiFetch<void>(`/namespaces/${encodeURIComponent(namespace)}/rollouts/${encodeURIComponent(rollout)}`, {
     method: 'DELETE'
   });
+}
+
+// ReplicaSet API functions
+export async function fetchReplicaSets(namespace: string): Promise<ReplicaSetListItem[]> {
+  const data = await apiFetch<{ items: ReplicaSetListItem[] }>(`/namespaces/${encodeURIComponent(namespace)}/replicasets`);
+  return data.items;
+}
+
+export async function fetchReplicaSet(namespace: string, name: string): Promise<ReplicaSetDetail> {
+  return apiFetch<ReplicaSetDetail>(`/namespaces/${encodeURIComponent(namespace)}/replicasets/${encodeURIComponent(name)}`);
+}
+
+export async function fetchReplicaSetManifest(namespace: string, name: string): Promise<string> {
+  const response = await fetch(
+    `${API_BASE}/namespaces/${encodeURIComponent(namespace)}/replicasets/${encodeURIComponent(name)}/manifest`
+  );
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Failed to load manifest (${response.status})`);
+  }
+  return await response.text();
+}
+
+export async function deleteReplicaSet(namespace: string, name: string): Promise<void> {
+  await apiFetch<void>(`/namespaces/${encodeURIComponent(namespace)}/replicasets/${encodeURIComponent(name)}`, {
+    method: 'DELETE'
+  });
+}
+
+export function subscribeToReplicaSetEvents(
+  namespace: string,
+  onEvent: (event: ReplicaSetWatchEvent) => void,
+  onError?: (error: ApiError | null) => void
+): () => void {
+  return createReconnectingEventSource<ReplicaSetWatchEvent>(
+    `${EVENTS_BASE}/replicasets?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 // DaemonSet API functions
@@ -2068,44 +2205,13 @@ export async function fetchDaemonSetStatus(namespace: string, daemonSet: string)
 export function subscribeToDaemonSetEvents(
   namespace: string,
   onEvent: (event: DaemonSetWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/daemonsets?namespace=${encodeURIComponent(namespace)}`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as DaemonSetWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse daemonset watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('DaemonSet watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<DaemonSetWatchEvent>(
+    `${EVENTS_BASE}/daemonsets?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 export async function deleteDaemonSet(namespace: string, daemonSet: string): Promise<void> {
@@ -2153,44 +2259,13 @@ export async function fetchStatefulSetStatus(namespace: string, statefulSet: str
 export function subscribeToStatefulSetEvents(
   namespace: string,
   onEvent: (event: StatefulSetWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/statefulsets?namespace=${encodeURIComponent(namespace)}`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as StatefulSetWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse statefulset watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('StatefulSet watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<StatefulSetWatchEvent>(
+    `${EVENTS_BASE}/statefulsets?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 export async function deleteStatefulSet(namespace: string, statefulSet: string): Promise<void> {
@@ -2245,44 +2320,13 @@ export async function fetchJobStatus(namespace: string, job: string): Promise<Jo
 export function subscribeToJobEvents(
   namespace: string,
   onEvent: (event: JobWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/jobs?namespace=${encodeURIComponent(namespace)}`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as JobWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse job watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('Job watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<JobWatchEvent>(
+    `${EVENTS_BASE}/jobs?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 export async function deleteJob(namespace: string, job: string): Promise<void> {
@@ -2315,44 +2359,13 @@ export async function fetchServiceAccountManifest(namespace: string, serviceAcco
 export function subscribeToServiceAccountEvents(
   namespace: string,
   onEvent: (event: ServiceAccountWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/serviceaccounts?namespace=${encodeURIComponent(namespace)}`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as ServiceAccountWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse serviceaccount watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('ServiceAccount watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<ServiceAccountWatchEvent>(
+    `${EVENTS_BASE}/serviceaccounts?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 export async function deleteServiceAccount(namespace: string, serviceAccount: string): Promise<void> {
@@ -2389,44 +2402,13 @@ export async function fetchArgoApplicationStatus(namespace: string, application:
 export function subscribeToArgoApplicationEvents(
   namespace: string,
   onEvent: (event: ArgoApplicationWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/argocd/applications?namespace=${encodeURIComponent(namespace)}`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as ArgoApplicationWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse Argo CD application watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('Argo CD application watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<ArgoApplicationWatchEvent>(
+    `${EVENTS_BASE}/argocd/applications?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 export async function deleteArgoApplication(namespace: string, application: string): Promise<void> {
@@ -2512,44 +2494,13 @@ export async function deleteConfigMap(namespace: string, configmap: string): Pro
 export function subscribeToConfigMapEvents(
   namespace: string,
   onEvent: (event: ConfigMapWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/configmaps?namespace=${encodeURIComponent(namespace)}`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as ConfigMapWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse configmap watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('ConfigMap watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<ConfigMapWatchEvent>(
+    `${EVENTS_BASE}/configmaps?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 // Secret API functions
@@ -2582,44 +2533,46 @@ export async function deleteSecret(namespace: string, secret: string): Promise<v
 export function subscribeToSecretEvents(
   namespace: string,
   onEvent: (event: SecretWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/secrets?namespace=${encodeURIComponent(namespace)}`);
+  return createReconnectingEventSource<SecretWatchEvent>(
+    `${EVENTS_BASE}/secrets?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
+}
 
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as SecretWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse secret watch event', error);
-    }
-  };
+// Helm release API functions
+export async function fetchHelmReleases(namespace: string): Promise<HelmReleaseListItem[]> {
+  const data = await apiFetch<{ items: HelmReleaseListItem[] }>(`/namespaces/${encodeURIComponent(namespace)}/helmreleases`);
+  return data.items;
+}
 
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('Secret watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
+export async function fetchHelmRelease(namespace: string, release: string): Promise<HelmReleaseDetail> {
+  return apiFetch<HelmReleaseDetail>(`/namespaces/${encodeURIComponent(namespace)}/helmreleases/${encodeURIComponent(release)}`);
+}
 
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
+export async function fetchHelmReleaseManifest(namespace: string, release: string): Promise<string> {
+  const response = await fetch(
+    `${API_BASE}/namespaces/${encodeURIComponent(namespace)}/helmreleases/${encodeURIComponent(release)}/manifest`
+  );
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Failed to load manifest (${response.status})`);
+  }
+  return await response.text();
+}
 
-  return () => {
-    eventSource.close();
-  };
+export function subscribeToHelmReleaseEvents(
+  namespace: string,
+  onEvent: (event: HelmReleaseWatchEvent) => void,
+  onError?: (error: ApiError | null) => void
+): () => void {
+  return createReconnectingEventSource<HelmReleaseWatchEvent>(
+    `${EVENTS_BASE}/helmreleases?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 // HPA API functions
@@ -2668,44 +2621,13 @@ export async function fetchHpaEvents(namespace: string, hpa: string): Promise<Hp
 export function subscribeToHpaEvents(
   namespace: string,
   onEvent: (event: HpaWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/hpas?namespace=${encodeURIComponent(namespace)}`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as HpaWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse hpa watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('HPA watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<HpaWatchEvent>(
+    `${EVENTS_BASE}/hpas?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 // PodDisruptionBudget API functions
@@ -2744,44 +2666,13 @@ export async function fetchPdbEvents(namespace: string, pdb: string): Promise<Pd
 export function subscribeToPdbEvents(
   namespace: string,
   onEvent: (event: PdbWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/pdbs?namespace=${encodeURIComponent(namespace)}`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as PdbWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse pdb watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('PDB watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<PdbWatchEvent>(
+    `${EVENTS_BASE}/pdbs?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 // ExternalSecret API functions
@@ -2817,44 +2708,13 @@ export async function fetchExternalSecretStatus(namespace: string, externalsecre
 export function subscribeToExternalSecretEvents(
   namespace: string,
   onEvent: (event: ExternalSecretWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/externalsecrets?namespace=${encodeURIComponent(namespace)}`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as ExternalSecretWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse externalsecret watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('ExternalSecret watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<ExternalSecretWatchEvent>(
+    `${EVENTS_BASE}/externalsecrets?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 export async function deleteExternalSecret(namespace: string, externalsecret: string): Promise<void> {
@@ -2893,37 +2753,13 @@ export async function deleteVirtualService(namespace: string, name: string): Pro
 export function subscribeToVirtualServiceEvents(
   namespace: string,
   onEvent: (event: VirtualServiceWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/virtualservices?namespace=${encodeURIComponent(namespace)}`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as VirtualServiceWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse virtualservice watch event', error);
-    }
-  };
-
-  eventSource.onerror = (event) => {
-    if (eventSource.readyState === EventSource.CLOSED) {
-      try {
-        const apiError = new ApiError(
-          'VirtualService watch stream closed unexpectedly',
-          0
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('VirtualService watch stream error', event);
-      }
-    }
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<VirtualServiceWatchEvent>(
+    `${EVENTS_BASE}/virtualservices?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 // Gateway API functions
@@ -2956,37 +2792,13 @@ export async function deleteGateway(namespace: string, name: string): Promise<vo
 export function subscribeToGatewayEvents(
   namespace: string,
   onEvent: (event: GatewayWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/gateways?namespace=${encodeURIComponent(namespace)}`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as GatewayWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse gateway watch event', error);
-    }
-  };
-
-  eventSource.onerror = (event) => {
-    if (eventSource.readyState === EventSource.CLOSED) {
-      try {
-        const apiError = new ApiError(
-          'Gateway watch stream closed unexpectedly',
-          0
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('Gateway watch stream error', event);
-      }
-    }
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<GatewayWatchEvent>(
+    `${EVENTS_BASE}/gateways?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 // DestinationRule API functions
@@ -3019,37 +2831,13 @@ export async function deleteDestinationRule(namespace: string, name: string): Pr
 export function subscribeToDestinationRuleEvents(
   namespace: string,
   onEvent: (event: DestinationRuleWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/destinationrules?namespace=${encodeURIComponent(namespace)}`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as DestinationRuleWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse destinationrule watch event', error);
-    }
-  };
-
-  eventSource.onerror = (event) => {
-    if (eventSource.readyState === EventSource.CLOSED) {
-      try {
-        const apiError = new ApiError(
-          'DestinationRule watch stream closed unexpectedly',
-          0
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('DestinationRule watch stream error', event);
-      }
-    }
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<DestinationRuleWatchEvent>(
+    `${EVENTS_BASE}/destinationrules?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 // SecretStore API functions
@@ -3085,44 +2873,13 @@ export async function fetchSecretStoreStatus(namespace: string, secretstore: str
 export function subscribeToSecretStoreEvents(
   namespace: string,
   onEvent: (event: SecretStoreWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/secretstores?namespace=${encodeURIComponent(namespace)}`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as SecretStoreWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse secret store watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('SecretStore watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<SecretStoreWatchEvent>(
+    `${EVENTS_BASE}/secretstores?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 export async function deleteSecretStore(namespace: string, secretstore: string): Promise<void> {
@@ -3158,44 +2915,13 @@ export async function fetchCustomResourceDefinitionManifest(name: string): Promi
 
 export function subscribeToCustomResourceDefinitionEvents(
   onEvent: (event: CustomResourceDefinitionWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/crds`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as CustomResourceDefinitionWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse CRD watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('CRD watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<CustomResourceDefinitionWatchEvent>(
+    `${EVENTS_BASE}/crds`,
+    onEvent,
+    onError
+  );
 }
 
 // Applications API functions
@@ -3234,44 +2960,13 @@ export async function deletePersistentVolumeClaim(namespace: string, pvc: string
 export function subscribeToPersistentVolumeClaimEvents(
   namespace: string,
   onEvent: (event: PersistentVolumeClaimWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/persistentvolumeclaims?namespace=${encodeURIComponent(namespace)}`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as PersistentVolumeClaimWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse PVC watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('PVC watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<PersistentVolumeClaimWatchEvent>(
+    `${EVENTS_BASE}/persistentvolumeclaims?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 // StorageClass API functions
@@ -3301,44 +2996,49 @@ export async function deleteStorageClass(name: string): Promise<void> {
 
 export function subscribeToStorageClassEvents(
   onEvent: (event: StorageClassWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/storageclasses`);
+  return createReconnectingEventSource<StorageClassWatchEvent>(
+    `${EVENTS_BASE}/storageclasses`,
+    onEvent,
+    onError
+  );
+}
 
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as StorageClassWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse StorageClass watch event', error);
-    }
-  };
+// IngressClass API functions
+export async function fetchIngressClasses(): Promise<IngressClassListItem[]> {
+  const data = await apiFetch<{ items: IngressClassListItem[] }>('/ingressclasses');
+  return data.items;
+}
 
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('StorageClass watch stream error', event);
-      }
-    }
-    eventSource.close();
+export async function fetchIngressClass(name: string): Promise<IngressClassDetail> {
+  return apiFetch<IngressClassDetail>(`/ingressclasses/${encodeURIComponent(name)}`);
+}
+
+export async function fetchIngressClassManifest(name: string): Promise<string> {
+  const response = await fetch(`${API_BASE}/ingressclasses/${encodeURIComponent(name)}/manifest`);
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Failed to load manifest (${response.status})`);
+  }
+  return await response.text();
+}
+
+export async function deleteIngressClass(name: string): Promise<void> {
+  await apiFetch<void>(`/ingressclasses/${encodeURIComponent(name)}`, {
+    method: 'DELETE'
   });
+}
 
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+export function subscribeToIngressClassEvents(
+  onEvent: (event: IngressClassWatchEvent) => void,
+  onError?: (error: ApiError | null) => void
+): () => void {
+  return createReconnectingEventSource<IngressClassWatchEvent>(
+    `${EVENTS_BASE}/ingressclasses`,
+    onEvent,
+    onError
+  );
 }
 
 // Role API functions
@@ -3371,44 +3071,13 @@ export async function deleteRole(namespace: string, role: string): Promise<void>
 export function subscribeToRoleEvents(
   namespace: string,
   onEvent: (event: RoleWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/roles?namespace=${encodeURIComponent(namespace)}`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as RoleWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse role watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('Role watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<RoleWatchEvent>(
+    `${EVENTS_BASE}/roles?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 // ClusterRole API functions
@@ -3438,44 +3107,13 @@ export async function deleteClusterRole(name: string): Promise<void> {
 
 export function subscribeToClusterRoleEvents(
   onEvent: (event: ClusterRoleWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/clusterroles`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as ClusterRoleWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse ClusterRole watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('ClusterRole watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<ClusterRoleWatchEvent>(
+    `${EVENTS_BASE}/clusterroles`,
+    onEvent,
+    onError
+  );
 }
 
 // NodeClass API functions
@@ -3509,44 +3147,13 @@ export async function deleteNodeClass(name: string): Promise<void> {
 
 export function subscribeToNodeClassEvents(
   onEvent: (event: NodeClassWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/nodeclasses`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as NodeClassWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse NodeClass watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('NodeClass watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<NodeClassWatchEvent>(
+    `${EVENTS_BASE}/nodeclasses`,
+    onEvent,
+    onError
+  );
 }
 
 // NodePool API functions
@@ -3577,44 +3184,13 @@ export async function deleteNodePool(name: string): Promise<void> {
 
 export function subscribeToNodePoolEvents(
   onEvent: (event: NodePoolWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/nodepools`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as NodePoolWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse NodePool watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('NodePool watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<NodePoolWatchEvent>(
+    `${EVENTS_BASE}/nodepools`,
+    onEvent,
+    onError
+  );
 }
 
 // CronJob API functions
@@ -3654,44 +3230,13 @@ export async function updateCronJobSuspend(namespace: string, cronjob: string, s
 export function subscribeToCronJobEvents(
   namespace: string,
   onEvent: (event: CronJobWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/cronjobs?namespace=${encodeURIComponent(namespace)}`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as CronJobWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse cronjob watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('CronJob watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<CronJobWatchEvent>(
+    `${EVENTS_BASE}/cronjobs?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 // Ingress API functions
@@ -3730,87 +3275,25 @@ export async function forceDeleteIngress(namespace: string, ingress: string): Pr
 export function subscribeToIngressEvents(
   namespace: string,
   onEvent: (event: IngressWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/ingresses?namespace=${encodeURIComponent(namespace)}`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as IngressWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse ingress watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('Ingress watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<IngressWatchEvent>(
+    `${EVENTS_BASE}/ingresses?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 export function subscribeToServiceEvents(
   namespace: string,
   onEvent: (event: ServiceWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/services?namespace=${encodeURIComponent(namespace)}`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as ServiceWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse service watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('Service watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<ServiceWatchEvent>(
+    `${EVENTS_BASE}/services?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 export interface LogStreamOptions {
@@ -3934,44 +3417,13 @@ export async function deleteScaledObject(namespace: string, scaledobject: string
 export function subscribeToScaledObjectEvents(
   namespace: string,
   onEvent: (event: ScaledObjectWatchEvent) => void,
-  onError?: (error: ApiError) => void
+  onError?: (error: ApiError | null) => void
 ): () => void {
-  const eventSource = new EventSource(`${EVENTS_BASE}/scaledobjects?namespace=${encodeURIComponent(namespace)}`);
-
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data) as ScaledObjectWatchEvent;
-      onEvent(data);
-    } catch (error) {
-      console.error('Failed to parse scaledobject watch event', error);
-    }
-  };
-
-  eventSource.addEventListener('error', (event) => {
-    if (event.type === 'error' && 'data' in event) {
-      try {
-        const messageEvent = event as MessageEvent;
-        const errorData = JSON.parse(messageEvent.data) as { message: string; statusCode?: number };
-        const apiError = new ApiError(
-          errorData.message,
-          errorData.statusCode || 500,
-          errorData.statusCode === 401
-        );
-        onError?.(apiError);
-      } catch {
-        console.error('ScaledObject watch stream error', event);
-      }
-    }
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
-
-  return () => {
-    eventSource.close();
-  };
+  return createReconnectingEventSource<ScaledObjectWatchEvent>(
+    `${EVENTS_BASE}/scaledobjects?namespace=${encodeURIComponent(namespace)}`,
+    onEvent,
+    onError
+  );
 }
 
 export async function fetchPortForwards(): Promise<PortForward[]> {

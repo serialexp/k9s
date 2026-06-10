@@ -178,8 +178,8 @@ const JobListPage = () => {
         setJobs((prev) => sortJobs(applyJobWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('Job stream error', error);
-        setJobsError(error.message);
+        if (error) console.error('Job stream error', error);
+        setJobsError(error?.message ?? '');
       }
     );
   });

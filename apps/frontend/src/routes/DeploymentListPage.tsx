@@ -201,8 +201,8 @@ const DeploymentListPage = () => {
         setDeployments((prev) => sortDeployments(applyDeploymentWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('Deployment stream error', error);
-        setDeploymentsError(error.message);
+        if (error) console.error('Deployment stream error', error);
+        setDeploymentsError(error?.message ?? '');
       }
     );
   });

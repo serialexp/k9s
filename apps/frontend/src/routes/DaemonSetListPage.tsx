@@ -179,8 +179,8 @@ const DaemonSetListPage = () => {
         setDaemonSets((prev) => sortDaemonSets(applyDaemonSetWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('DaemonSet stream error', error);
-        setDaemonSetsError(error.message);
+        if (error) console.error('DaemonSet stream error', error);
+        setDaemonSetsError(error?.message ?? '');
       }
     );
   });

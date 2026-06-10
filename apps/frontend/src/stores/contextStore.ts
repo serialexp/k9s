@@ -104,7 +104,7 @@ const loadNamespaces = async (preferredNamespace?: string) => {
         }
       },
       (error) => {
-        console.error('Namespace stream error:', error);
+        if (error) console.error('Namespace stream error:', error);
       }
     );
   } catch (error) {

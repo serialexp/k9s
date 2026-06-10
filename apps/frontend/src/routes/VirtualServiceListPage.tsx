@@ -155,8 +155,8 @@ const VirtualServiceListPage = () => {
         setVirtualServices((prev) => sortVirtualServices(applyVirtualServiceWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('VirtualService stream error', error);
-        setVirtualServicesError(error.message);
+        if (error) console.error('VirtualService stream error', error);
+        setVirtualServicesError(error?.message ?? '');
       }
     );
   });

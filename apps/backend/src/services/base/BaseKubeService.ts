@@ -8,6 +8,7 @@ import {
 	CoreV1Api,
 	CustomObjectsApi,
 	KubeConfig,
+	KubernetesObjectApi,
 	Log,
 	NetworkingV1Api,
 	PolicyV1Api,
@@ -31,6 +32,7 @@ export class BaseKubeService {
 	protected rbacApi: RbacAuthorizationV1Api;
 	protected storageApi: StorageV1Api;
 	protected customObjectsApi: CustomObjectsApi;
+	protected objectApi: KubernetesObjectApi;
 	protected watch: Watch;
 	protected log: Log;
 	protected crdCache: Map<string, boolean> = new Map();
@@ -46,6 +48,7 @@ export class BaseKubeService {
 		this.rbacApi = this.kubeConfig.makeApiClient(RbacAuthorizationV1Api);
 		this.storageApi = this.kubeConfig.makeApiClient(StorageV1Api);
 		this.customObjectsApi = this.kubeConfig.makeApiClient(CustomObjectsApi);
+		this.objectApi = KubernetesObjectApi.makeApiClient(this.kubeConfig);
 		this.watch = new Watch(this.kubeConfig);
 		this.log = new Log(this.kubeConfig);
 	}
@@ -60,6 +63,7 @@ export class BaseKubeService {
 		this.rbacApi = this.kubeConfig.makeApiClient(RbacAuthorizationV1Api);
 		this.storageApi = this.kubeConfig.makeApiClient(StorageV1Api);
 		this.customObjectsApi = this.kubeConfig.makeApiClient(CustomObjectsApi);
+		this.objectApi = KubernetesObjectApi.makeApiClient(this.kubeConfig);
 		this.watch = new Watch(this.kubeConfig);
 		this.log = new Log(this.kubeConfig);
 	}

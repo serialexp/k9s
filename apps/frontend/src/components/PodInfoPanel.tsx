@@ -93,19 +93,19 @@ const PodInfoPanel = (props: PodInfoPanelProps) => (
     }
   >
     {(pod) => {
-      const terminatedContainers = pod().containersStatus.filter(
+      const terminatedContainers = () => pod().containersStatus.filter(
         (c) => c.lastState?.terminated
       );
-      const successTerminations = terminatedContainers.filter((c) => {
+      const successTerminations = () => terminatedContainers().filter((c) => {
         const terminated = c.lastState?.terminated as Record<string, unknown> | undefined;
         return terminated?.exitCode === 0;
       });
-      const errorTerminations = terminatedContainers.filter((c) => {
+      const errorTerminations = () => terminatedContainers().filter((c) => {
         const terminated = c.lastState?.terminated as Record<string, unknown> | undefined;
         return terminated?.exitCode !== 0;
       });
 
-      const renderTerminatedAlert = (containers: typeof terminatedContainers, isError: boolean) => (
+      const renderTerminatedAlert = (containers: ReturnType<typeof terminatedContainers>, isError: boolean) => (
         <div class={`alert ${isError ? 'alert-error' : 'alert-info'} shadow-lg`}>
           <Show
             when={isError}
@@ -160,11 +160,11 @@ const PodInfoPanel = (props: PodInfoPanelProps) => (
 
       return (
         <div class="flex flex-col gap-6">
-          <Show when={errorTerminations.length > 0}>
-            {renderTerminatedAlert(errorTerminations, true)}
+          <Show when={errorTerminations().length > 0}>
+            {renderTerminatedAlert(errorTerminations(), true)}
           </Show>
-          <Show when={successTerminations.length > 0}>
-            {renderTerminatedAlert(successTerminations, false)}
+          <Show when={successTerminations().length > 0}>
+            {renderTerminatedAlert(successTerminations(), false)}
           </Show>
           <div class="grid gap-3 lg:grid-cols-2">
           <div class="card bg-base-200/60">

@@ -188,6 +188,63 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
 
   fastify.get<{
     Querystring: { namespace?: string };
+  }>('/replicasets', async (request, reply) => {
+    const namespace = request.query.namespace ?? 'default';
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      Connection: 'keep-alive',
+      'Cache-Control': 'no-cache'
+    });
+
+    const send = (data: string) => {
+      reply.raw.write(`data: ${data}\n\n`);
+    };
+
+    const sendHeartbeat = () => {
+      reply.raw.write('event: heartbeat\n');
+      reply.raw.write(`data: {"ts": ${Date.now()} }\n\n`);
+    };
+
+    const heartbeatInterval = setInterval(sendHeartbeat, 25000);
+
+    const abortController = new AbortController();
+    const teardown = await kube
+      .streamReplicaSets(
+        namespace,
+        (chunk) => send(chunk),
+        (err) => {
+          const error = err as { statusCode?: number; body?: { message?: string }; message?: string };
+          fastify.log.error({ err }, 'replicaset watch error');
+          reply.raw.write('event: error\n');
+          const errorMessage = error.statusCode === 401
+            ? 'Authentication failed. Please check your Kubernetes credentials.'
+            : error.message ?? 'unknown error';
+          reply.raw.write(`data: ${JSON.stringify({ message: errorMessage, statusCode: error.statusCode })}\n\n`);
+        },
+        abortController.signal
+      )
+      .catch((error) => {
+        const err = error as { statusCode?: number; body?: { message?: string }; message?: string };
+        fastify.log.error({ error }, 'failed to start replicaset watch');
+        reply.raw.write('event: error\n');
+        const errorMessage = err.statusCode === 401
+          ? 'Authentication failed. Please check your Kubernetes credentials.'
+          : err.message ?? 'unknown error';
+        reply.raw.write(`data: ${JSON.stringify({ message: errorMessage, statusCode: err.statusCode })}\n\n`);
+        return () => undefined;
+      });
+
+    request.raw.on('close', () => {
+      clearInterval(heartbeatInterval);
+      abortController.abort();
+      teardown?.();
+    });
+
+    return reply;
+  });
+
+  fastify.get<{
+    Querystring: { namespace?: string };
   }>('/daemonsets', async (request, reply) => {
     const namespace = request.query.namespace ?? 'default';
     reply.raw.writeHead(200, {
@@ -774,6 +831,63 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
 
   fastify.get<{
     Querystring: { namespace?: string };
+  }>('/helmreleases', async (request, reply) => {
+    const namespace = request.query.namespace ?? 'default';
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      Connection: 'keep-alive',
+      'Cache-Control': 'no-cache'
+    });
+
+    const send = (data: string) => {
+      reply.raw.write(`data: ${data}\n\n`);
+    };
+
+    const sendHeartbeat = () => {
+      reply.raw.write('event: heartbeat\n');
+      reply.raw.write(`data: {"ts": ${Date.now()} }\n\n`);
+    };
+
+    const heartbeatInterval = setInterval(sendHeartbeat, 25000);
+
+    const abortController = new AbortController();
+    const teardown = await kube
+      .streamHelmReleases(
+        namespace,
+        (chunk) => send(chunk),
+        (err) => {
+          const error = err as { statusCode?: number; body?: { message?: string }; message?: string };
+          fastify.log.error({ err }, 'helm release watch error');
+          reply.raw.write('event: error\n');
+          const errorMessage = error.statusCode === 401
+            ? 'Authentication failed. Please check your Kubernetes credentials.'
+            : error.message ?? 'unknown error';
+          reply.raw.write(`data: ${JSON.stringify({ message: errorMessage, statusCode: error.statusCode })}\n\n`);
+        },
+        abortController.signal
+      )
+      .catch((error) => {
+        const err = error as { statusCode?: number; body?: { message?: string }; message?: string };
+        fastify.log.error({ error }, 'failed to start helm release watch');
+        reply.raw.write('event: error\n');
+        const errorMessage = err.statusCode === 401
+          ? 'Authentication failed. Please check your Kubernetes credentials.'
+          : err.message ?? 'unknown error';
+        reply.raw.write(`data: ${JSON.stringify({ message: errorMessage, statusCode: err.statusCode })}\n\n`);
+        return () => undefined;
+      });
+
+    request.raw.on('close', () => {
+      clearInterval(heartbeatInterval);
+      abortController.abort();
+      teardown?.();
+    });
+
+    return reply;
+  });
+
+  fastify.get<{
+    Querystring: { namespace?: string };
   }>('/hpas', async (request, reply) => {
     const namespace = request.query.namespace ?? 'default';
     reply.raw.writeHead(200, {
@@ -1097,6 +1211,59 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
       .catch((error) => {
         const err = error as { statusCode?: number; body?: { message?: string }; message?: string };
         fastify.log.error({ error }, 'failed to start storageclass watch');
+        reply.raw.write('event: error\n');
+        const errorMessage = err.statusCode === 401
+          ? 'Authentication failed. Please check your Kubernetes credentials.'
+          : err.message ?? 'unknown error';
+        reply.raw.write(`data: ${JSON.stringify({ message: errorMessage, statusCode: err.statusCode })}\n\n`);
+        return () => undefined;
+      });
+
+    request.raw.on('close', () => {
+      clearInterval(heartbeatInterval);
+      abortController.abort();
+      teardown?.();
+    });
+
+    return reply;
+  });
+
+  fastify.get('/ingressclasses', async (request, reply) => {
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      Connection: 'keep-alive',
+      'Cache-Control': 'no-cache'
+    });
+
+    const send = (data: string) => {
+      reply.raw.write(`data: ${data}\n\n`);
+    };
+
+    const sendHeartbeat = () => {
+      reply.raw.write('event: heartbeat\n');
+      reply.raw.write(`data: {"ts": ${Date.now()} }\n\n`);
+    };
+
+    const heartbeatInterval = setInterval(sendHeartbeat, 25000);
+
+    const abortController = new AbortController();
+    const teardown = await kube
+      .streamIngressClasses(
+        (chunk) => send(chunk),
+        (err) => {
+          const error = err as { statusCode?: number; body?: { message?: string }; message?: string };
+          fastify.log.error({ err }, 'ingressclass watch error');
+          reply.raw.write('event: error\n');
+          const errorMessage = error.statusCode === 401
+            ? 'Authentication failed. Please check your Kubernetes credentials.'
+            : error.message ?? 'unknown error';
+          reply.raw.write(`data: ${JSON.stringify({ message: errorMessage, statusCode: error.statusCode })}\n\n`);
+        },
+        abortController.signal
+      )
+      .catch((error) => {
+        const err = error as { statusCode?: number; body?: { message?: string }; message?: string };
+        fastify.log.error({ error }, 'failed to start ingressclass watch');
         reply.raw.write('event: error\n');
         const errorMessage = err.statusCode === 401
           ? 'Authentication failed. Please check your Kubernetes credentials.'

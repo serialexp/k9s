@@ -78,6 +78,27 @@ export const formatCpuComparison = (used?: string, reserved?: string): string =>
   return `${formatCore(usedCores)} / ${formatCore(reservedCores)}`;
 };
 
+export const parseMemoryToBytes = (value?: string): number | undefined => {
+  if (!value) return undefined;
+  const match = value.match(/^([0-9.]+)([A-Za-z]+)?$/);
+  if (!match) return undefined;
+
+  const amount = Number.parseFloat(match[1]);
+  if (!Number.isFinite(amount)) return undefined;
+
+  const unit = match[2]?.toUpperCase() || 'B';
+  const multipliers: Record<string, number> = {
+    'B': 1,
+    'KI': 1024,
+    'MI': 1024 ** 2,
+    'GI': 1024 ** 3,
+    'TI': 1024 ** 4,
+  };
+
+  const multiplier = multipliers[unit];
+  return multiplier !== undefined ? amount * multiplier : undefined;
+};
+
 const parseMemoryToGiB = (value?: string): number | undefined => {
   if (!value) return undefined;
   const match = value.match(/^([0-9.]+)([A-Za-z]+)?$/);

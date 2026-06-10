@@ -5,6 +5,7 @@ import PodTable from '../components/PodTable';
 import PodInfoPanel from '../components/PodInfoPanel';
 import PodEventsPanel from '../components/PodEventsPanel';
 import PodStatusPanel from '../components/PodStatusPanel';
+import PodEnvPanel from '../components/PodEnvPanel';
 import LogViewer from '../components/LogViewer';
 import PortForwardDialog from '../components/PortForwardDialog';
 import ExecDialog from '../components/ExecDialog';
@@ -15,6 +16,7 @@ import {
   ApiError,
   deletePod,
   evictPod,
+  forceDeletePod,
   fetchPod,
   fetchPodEvents,
   fetchPodManifest,
@@ -203,8 +205,8 @@ const ResourceListPage = () => {
         setPods((prev) => sortPods(applyPodWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('Pod stream error', error);
-        setPodsError(error.message);
+        if (error) console.error('Pod stream error', error);
+        setPodsError(error?.message ?? '');
       }
     );
   });
@@ -256,6 +258,16 @@ const ResourceListPage = () => {
     navigate(`/${encodeURIComponent(context())}/${encodeURIComponent(ns)}/pods`);
   };
 
+  const handleForceDeletePod = async () => {
+    const rn = resourceName();
+    const ns = namespace();
+    if (!rn || !ns) return;
+
+    await forceDeletePod(ns, rn);
+    // Navigate back to pod list after force delete
+    navigate(`/${encodeURIComponent(context())}/${encodeURIComponent(ns)}/pods`);
+  };
+
   const handleStartPortForward = async (localPort: number, targetPort: number) => {
     const rn = resourceName();
     const ns = namespace();
@@ -286,6 +298,16 @@ const ResourceListPage = () => {
         confirm: {
           title: 'Delete Pod',
           message: `Are you sure you want to delete pod "${resourceName()}"? This action cannot be undone.`
+        }
+      },
+      {
+        label: 'Force Delete',
+        variant: 'error',
+        icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z',
+        onClick: handleForceDeletePod,
+        confirm: {
+          title: 'Force Delete Pod',
+          message: `Are you sure you want to force delete pod "${resourceName()}"? This sets gracePeriodSeconds to 0 and immediately removes the pod. Use this for pods stuck in Terminating state.`
         }
       }
     ];
@@ -362,6 +384,13 @@ const ResourceListPage = () => {
               </button>
               <button
                 type="button"
+                class={`tab ${tab() === 'env' ? 'tab-active' : ''}`}
+                onClick={() => handleTabChange('env')}
+              >
+                Env
+              </button>
+              <button
+                type="button"
                 class={`tab ${tab() === 'events' ? 'tab-active' : ''}`}
                 onClick={() => handleTabChange('events')}
               >
@@ -410,6 +439,9 @@ const ResourceListPage = () => {
                 </Match>
                 <Match when={tab() === 'manifest'}>
                   <ManifestViewer manifest={manifest()} loading={podDetailLoading()} />
+                </Match>
+                <Match when={tab() === 'env'}>
+                  <PodEnvPanel manifest={manifest()} loading={podDetailLoading()} />
                 </Match>
                 <Match when={tab() === 'events'}>
                   <PodEventsPanel events={podEvents()} loading={podEventsLoading()} />

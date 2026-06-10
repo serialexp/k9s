@@ -1,5 +1,5 @@
 import { FastifyPluginAsync } from 'fastify';
-import { KubeService, CRDNotInstalledError } from '../services/kube.js';
+import { KubeService, CRDNotInstalledError, ManifestApplyError } from '../services/kube.js';
 import { AwsService } from '../services/aws.js';
 import yaml from 'yaml';
 
@@ -13,6 +13,28 @@ export const apiPlugin: FastifyPluginAsync<ApiPluginOptions> = async (fastify, o
 
   fastify.get('/health', async () => ({ status: 'ok' }));
 
+  // Generic manifest apply (Replace / kubectl-edit semantics) for any resource.
+  // The target is derived from the manifest's own apiVersion/kind/metadata.
+  fastify.put<{ Body: { manifest?: string } }>('/manifest', async (request, reply) => {
+    const manifest = request.body?.manifest;
+    if (typeof manifest !== 'string' || manifest.trim().length === 0) {
+      reply.code(400);
+      return { error: 'Request body must include a non-empty "manifest" string.' };
+    }
+    try {
+      const applied = await kube.applyManifest(manifest);
+      return applied;
+    } catch (error) {
+      request.log.error(error);
+      if (error instanceof ManifestApplyError) {
+        reply.code(error.statusCode);
+        return { error: error.message };
+      }
+      reply.code(500);
+      return { error: (error as Error).message };
+    }
+  });
+
   fastify.get('/contexts', async () => ({ contexts: kube.getContexts() }));
 
   fastify.get('/contexts/current', async () => ({ name: kube.getCurrentContext() }));
@@ -21,6 +43,30 @@ export const apiPlugin: FastifyPluginAsync<ApiPluginOptions> = async (fastify, o
     const { name } = request.body;
     try {
       kube.setCurrentContext(name);
+      reply.code(204);
+      return null;
+    } catch (error) {
+      request.log.error(error);
+      reply.code(400);
+      return { error: (error as Error).message };
+    }
+  });
+
+  fastify.get<{ Params: { name: string } }>('/contexts/:name/status', async (request, reply) => {
+    const { name } = request.params;
+    try {
+      const status = await kube.checkContextStatus(name);
+      return status;
+    } catch (error) {
+      request.log.error(error);
+      return { reachable: false, error: (error as Error).message };
+    }
+  });
+
+  fastify.delete<{ Params: { name: string } }>('/contexts/:name', async (request, reply) => {
+    const { name } = request.params;
+    try {
+      kube.deleteContext(name);
       reply.code(204);
       return null;
     } catch (error) {
@@ -120,14 +166,18 @@ export const apiPlugin: FastifyPluginAsync<ApiPluginOptions> = async (fastify, o
     }
   });
 
-  fastify.delete<{ Params: { namespace: string } }>('/namespaces/:namespace', async (request, reply) => {
+  fastify.delete<{ Params: { namespace: string }; Querystring: { force?: string } }>('/namespaces/:namespace', async (request, reply) => {
     const { namespace } = request.params;
     if (!namespace) {
       reply.code(400);
       return { error: 'namespace name is required' };
     }
     try {
-      await kube.deleteNamespace(namespace);
+      if (request.query.force === 'true') {
+        await kube.forceDeleteNamespace(namespace);
+      } else {
+        await kube.deleteNamespace(namespace);
+      }
       reply.code(204);
       return null;
     } catch (error) {
@@ -244,6 +294,35 @@ export const apiPlugin: FastifyPluginAsync<ApiPluginOptions> = async (fastify, o
     }
     const result = await kube.drainNode(node);
     return result;
+  });
+
+  fastify.delete<{ Params: { node: string } }>('/nodes/:node/force', async (request, reply) => {
+    const { node } = request.params;
+    if (!node) {
+      reply.code(400);
+      return { error: 'node name is required' };
+    }
+    await kube.forceDeleteNode(node);
+    reply.code(204);
+    return null;
+  });
+
+  fastify.get<{ Params: { nodeclaim: string } }>('/nodeclaims/:nodeclaim', async (request, reply) => {
+    const { nodeclaim } = request.params;
+    if (!nodeclaim) {
+      reply.code(400);
+      return { error: 'nodeclaim name is required' };
+    }
+    try {
+      return await kube.getNodeClaim(nodeclaim);
+    } catch (error) {
+      const err = error as { statusCode?: number };
+      if (err.statusCode === 404) {
+        reply.code(404);
+        return { error: 'NodeClaim not found' };
+      }
+      throw error;
+    }
   });
 
   // Node exec routes (debug pod sessions)
@@ -388,6 +467,17 @@ export const apiPlugin: FastifyPluginAsync<ApiPluginOptions> = async (fastify, o
       return { error: 'namespace and pod are required' };
     }
     await kube.deletePod(namespace, pod);
+    reply.code(204);
+    return null;
+  });
+
+  fastify.delete<{ Params: { namespace: string; pod: string } }>('/namespaces/:namespace/pods/:pod/force', async (request, reply) => {
+    const { namespace, pod } = request.params;
+    if (!namespace || !pod) {
+      reply.code(400);
+      return { error: 'namespace and pod are required' };
+    }
+    await kube.forceDeletePod(namespace, pod);
     reply.code(204);
     return null;
   });
@@ -621,6 +711,54 @@ export const apiPlugin: FastifyPluginAsync<ApiPluginOptions> = async (fastify, o
       return { error: 'namespace and rollout are required' };
     }
     await kube.deleteRollout(namespace, rollout);
+    reply.code(204);
+    return null;
+  });
+
+  // ReplicaSet routes
+  fastify.get<{ Params: { namespace: string } }>('/namespaces/:namespace/replicasets', async (request, reply) => {
+    const { namespace } = request.params;
+    if (!namespace) {
+      reply.code(400);
+      return { error: 'namespace is required' };
+    }
+    try {
+      const replicaSets = await kube.listReplicaSets(namespace);
+      return { items: replicaSets };
+    } catch (error) {
+      const err = error as { statusCode?: number; body?: { message?: string }; message?: string };
+      if (err.statusCode === 401) {
+        reply.code(401);
+        return { error: err.body?.message || err.message || 'Authentication failed. Please check your Kubernetes credentials.' };
+      }
+      throw error;
+    }
+  });
+
+  fastify.get<{ Params: { namespace: string; replicaset: string } }>('/namespaces/:namespace/replicasets/:replicaset', async (request, reply) => {
+    const { namespace, replicaset } = request.params;
+    if (!namespace || !replicaset) {
+      reply.code(400);
+      return { error: 'namespace and replicaset are required' };
+    }
+    const detail = await kube.getReplicaSet(namespace, replicaset);
+    return detail;
+  });
+
+  fastify.get<{ Params: { namespace: string; replicaset: string } }>('/namespaces/:namespace/replicasets/:replicaset/manifest', async (request, reply) => {
+    const { namespace, replicaset } = request.params;
+    const manifest = await kube.getReplicaSetManifest(namespace, replicaset);
+    reply.header('content-type', 'application/yaml');
+    return yaml.stringify(JSON.parse(manifest));
+  });
+
+  fastify.delete<{ Params: { namespace: string; replicaset: string } }>('/namespaces/:namespace/replicasets/:replicaset', async (request, reply) => {
+    const { namespace, replicaset } = request.params;
+    if (!namespace || !replicaset) {
+      reply.code(400);
+      return { error: 'namespace and replicaset are required' };
+    }
+    await kube.deleteReplicaSet(namespace, replicaset);
     reply.code(204);
     return null;
   });
@@ -1131,6 +1269,43 @@ export const apiPlugin: FastifyPluginAsync<ApiPluginOptions> = async (fastify, o
     await kube.deleteSecret(namespace, secret);
     reply.code(204);
     return null;
+  });
+
+  // Helm release routes
+  fastify.get<{ Params: { namespace: string } }>('/namespaces/:namespace/helmreleases', async (request, reply) => {
+    const { namespace } = request.params;
+    if (!namespace) {
+      reply.code(400);
+      return { error: 'namespace is required' };
+    }
+    try {
+      const releases = await kube.listHelmReleases(namespace);
+      return { items: releases };
+    } catch (error) {
+      const err = error as { statusCode?: number; body?: { message?: string }; message?: string };
+      if (err.statusCode === 401) {
+        reply.code(401);
+        return { error: err.body?.message || err.message || 'Authentication failed. Please check your Kubernetes credentials.' };
+      }
+      throw error;
+    }
+  });
+
+  fastify.get<{ Params: { namespace: string; release: string } }>('/namespaces/:namespace/helmreleases/:release', async (request, reply) => {
+    const { namespace, release } = request.params;
+    if (!namespace || !release) {
+      reply.code(400);
+      return { error: 'namespace and release are required' };
+    }
+    const detail = await kube.getHelmRelease(namespace, release);
+    return detail;
+  });
+
+  fastify.get<{ Params: { namespace: string; release: string } }>('/namespaces/:namespace/helmreleases/:release/manifest', async (request, reply) => {
+    const { namespace, release } = request.params;
+    const manifest = await kube.getHelmReleaseManifest(namespace, release);
+    reply.header('content-type', 'application/yaml');
+    return yaml.stringify(JSON.parse(manifest));
   });
 
   // HPA routes
@@ -1702,6 +1877,49 @@ export const apiPlugin: FastifyPluginAsync<ApiPluginOptions> = async (fastify, o
       return { error: 'storageclass is required' };
     }
     await kube.deleteStorageClass(storageclass);
+    reply.code(204);
+    return null;
+  });
+
+  // IngressClass routes
+  fastify.get('/ingressclasses', async (_request, reply) => {
+    try {
+      const ingressClasses = await kube.listIngressClasses();
+      return { items: ingressClasses };
+    } catch (error) {
+      const err = error as { statusCode?: number; body?: { message?: string }; message?: string };
+      if (err.statusCode === 401) {
+        reply.code(401);
+        return { error: err.body?.message || err.message || 'Authentication failed. Please check your Kubernetes credentials.' };
+      }
+      throw error;
+    }
+  });
+
+  fastify.get<{ Params: { ingressclass: string } }>('/ingressclasses/:ingressclass', async (request, reply) => {
+    const { ingressclass } = request.params;
+    if (!ingressclass) {
+      reply.code(400);
+      return { error: 'ingressclass is required' };
+    }
+    const detail = await kube.getIngressClass(ingressclass);
+    return detail;
+  });
+
+  fastify.get<{ Params: { ingressclass: string } }>('/ingressclasses/:ingressclass/manifest', async (request, reply) => {
+    const { ingressclass } = request.params;
+    const manifest = await kube.getIngressClassManifest(ingressclass);
+    reply.header('content-type', 'application/yaml');
+    return yaml.stringify(JSON.parse(manifest));
+  });
+
+  fastify.delete<{ Params: { ingressclass: string } }>('/ingressclasses/:ingressclass', async (request, reply) => {
+    const { ingressclass } = request.params;
+    if (!ingressclass) {
+      reply.code(400);
+      return { error: 'ingressclass is required' };
+    }
+    await kube.deleteIngressClass(ingressclass);
     reply.code(204);
     return null;
   });

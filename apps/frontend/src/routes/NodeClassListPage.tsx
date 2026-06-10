@@ -158,8 +158,8 @@ const NodeClassListPage = () => {
         setNodeClasses((prev) => sortNodeClasses(applyNodeClassWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('NodeClass stream error', error);
-        setNodeClassesError(error.message);
+        if (error) console.error('NodeClass stream error', error);
+        setNodeClassesError(error?.message ?? '');
       }
     );
   });

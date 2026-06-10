@@ -165,8 +165,8 @@ const ArgoApplicationListPage = () => {
         setApplications((prev) => sortArgoApplications(applyArgoApplicationWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('Argo application stream error', error);
-        setApplicationsError(error.message);
+        if (error) console.error('Argo application stream error', error);
+        setApplicationsError(error?.message ?? '');
       }
     );
   });

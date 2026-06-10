@@ -155,8 +155,8 @@ const ScaledObjectListPage = () => {
         setScaledObjects((prev) => sortScaledObjects(applyScaledObjectWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('ScaledObject stream error', error);
-        setScaledObjectsError(error.message);
+        if (error) console.error('ScaledObject stream error', error);
+        setScaledObjectsError(error?.message ?? '');
       }
     );
   });

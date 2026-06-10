@@ -1,12 +1,13 @@
 // ABOUTME: Info panel component displaying detailed Kubernetes node information
-// ABOUTME: Shows metadata, resources, conditions, taints, labels and annotations
+// ABOUTME: Shows metadata, resources, conditions, taints, labels, annotations, and Karpenter NodeClaim
 
 import { For, Show } from 'solid-js';
-import type { NodeDetail } from '../lib/api';
+import type { NodeDetail, NodeClaimSummary } from '../lib/api';
 import { formatRelativeTime } from '../utils/datetime';
 
 interface NodeInfoPanelProps {
   node?: NodeDetail;
+  nodeClaim?: NodeClaimSummary;
   loading?: boolean;
 }
 
@@ -103,6 +104,108 @@ const NodeInfoPanel = (props: NodeInfoPanelProps) => (
             </div>
           </div>
         </div>
+
+        <Show when={props.nodeClaim}>
+          {(nc) => (
+            <div class="card bg-base-200/60">
+              <div class="card-body gap-3 text-sm">
+                <h3 class="text-xs uppercase tracking-wide opacity-80">Karpenter NodeClaim</h3>
+                <div class="flex items-center justify-between gap-3">
+                  <span class="opacity-70">Name</span>
+                  <span class="font-mono text-xs">{nc().name}</span>
+                </div>
+                <Show when={nc().nodePoolName}>
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="opacity-70">NodePool</span>
+                    <span class="font-mono text-xs">{nc().nodePoolName}</span>
+                  </div>
+                </Show>
+                <Show when={nc().instanceType}>
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="opacity-70">Instance Type</span>
+                    <span class="font-mono text-xs">{nc().instanceType}</span>
+                  </div>
+                </Show>
+                <Show when={nc().capacityType}>
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="opacity-70">Capacity Type</span>
+                    <span class="font-mono text-xs">{nc().capacityType}</span>
+                  </div>
+                </Show>
+                <Show when={nc().zone}>
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="opacity-70">Zone</span>
+                    <span class="font-mono text-xs">{nc().zone}</span>
+                  </div>
+                </Show>
+                <Show when={nc().creationTimestamp}>
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="opacity-70">Age</span>
+                    <span>{formatRelativeTime(nc().creationTimestamp)}</span>
+                  </div>
+                </Show>
+                <Show when={nc().finalizers.length > 0}>
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="opacity-70">Finalizers</span>
+                    <div class="flex flex-wrap gap-1 justify-end">
+                      <For each={nc().finalizers}>
+                        {(f) => (
+                          <span class="badge badge-outline badge-xs font-mono">{f}</span>
+                        )}
+                      </For>
+                    </div>
+                  </div>
+                </Show>
+                <Show when={nc().conditions.length > 0}>
+                  <div class="divider my-0" />
+                  <div class="overflow-x-auto">
+                    <table class="table table-sm">
+                      <thead>
+                        <tr class="text-xs uppercase tracking-wide opacity-70">
+                          <th>Condition</th>
+                          <th>Status</th>
+                          <th>Reason</th>
+                          <th>Message</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <For each={nc().conditions}>
+                          {(c) => (
+                            <tr>
+                              <td class="font-mono text-xs">{c.type}</td>
+                              <td>
+                                <span class={`badge badge-xs ${c.status === 'True' ? 'badge-success' : c.status === 'False' ? 'badge-error' : 'badge-warning'}`}>
+                                  {c.status}
+                                </span>
+                              </td>
+                              <td class="text-xs opacity-80">{c.reason ?? '—'}</td>
+                              <td class="text-xs opacity-70 max-w-xs truncate" title={c.message}>{c.message ?? '—'}</td>
+                            </tr>
+                          )}
+                        </For>
+                      </tbody>
+                    </table>
+                  </div>
+                </Show>
+              </div>
+            </div>
+          )}
+        </Show>
+
+        <Show when={node().finalizers.length > 0}>
+          <div class="card bg-base-200/60">
+            <div class="card-body gap-3 text-sm">
+              <h3 class="text-xs uppercase tracking-wide opacity-80">Finalizers</h3>
+              <div class="flex flex-wrap gap-2">
+                <For each={node().finalizers}>
+                  {(f) => (
+                    <span class="badge badge-outline badge-sm font-mono">{f}</span>
+                  )}
+                </For>
+              </div>
+            </div>
+          </div>
+        </Show>
 
         <div class="card bg-base-200/60">
           <div class="card-body gap-3">

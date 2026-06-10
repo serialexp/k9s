@@ -164,8 +164,8 @@ const HpaListPage = () => {
         setHpas((prev) => sortHpas(applyHpaWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('HPA stream error', error);
-        setHpasError(error.message);
+        if (error) console.error('HPA stream error', error);
+        setHpasError(error?.message ?? '');
       }
     );
   });

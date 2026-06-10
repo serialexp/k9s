@@ -155,8 +155,8 @@ const RoleListPage = () => {
         setRoles((prev) => sortRoles(applyRoleWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('Role stream error', error);
-        setRolesError(error.message);
+        if (error) console.error('Role stream error', error);
+        setRolesError(error?.message ?? '');
       }
     );
   });

@@ -15,12 +15,15 @@ import {
   fetchNode,
   fetchNodeManifest,
   fetchNodeEvents,
+  fetchNodeClaim,
   cordonNode,
   uncordonNode,
   drainNode,
+  forceDeleteNode,
   type NodeListItem,
   type NodeDetail,
   type NodeEvent,
+  type NodeClaimSummary,
 } from '../lib/api';
 import { contextStore } from '../stores/contextStore';
 
@@ -42,6 +45,7 @@ const NodeListPage = () => {
   const [manifest, setManifest] = createSignal<string>('');
   const [nodeEvents, setNodeEvents] = createSignal<NodeEvent[]>([]);
   const [nodeEventsLoading, setNodeEventsLoading] = createSignal(false);
+  const [nodeClaim, setNodeClaim] = createSignal<NodeClaimSummary | undefined>();
   const [execDialogOpen, setExecDialogOpen] = createSignal(false);
 
   let requestId = 0;
@@ -87,11 +91,24 @@ const NodeListPage = () => {
         setManifest(manifestYaml);
         setNodeEvents(events);
       });
+
+      // Fetch NodeClaim if the node has one
+      if (detail.ownerNodeClaim?.name) {
+        try {
+          const claim = await fetchNodeClaim(detail.ownerNodeClaim.name);
+          setNodeClaim(claim);
+        } catch {
+          setNodeClaim(undefined);
+        }
+      } else {
+        setNodeClaim(undefined);
+      }
     } catch (err) {
       console.error('Failed to load node detail', err);
       setNodeDetail(undefined);
       setManifest('');
       setNodeEvents([]);
+      setNodeClaim(undefined);
     } finally {
       setNodeDetailLoading(false);
       setNodeEventsLoading(false);
@@ -106,6 +123,7 @@ const NodeListPage = () => {
     setNodeDetail(undefined);
     setManifest('');
     setNodeEvents([]);
+    setNodeClaim(undefined);
 
     void loadNodes();
   });
@@ -159,6 +177,14 @@ const NodeListPage = () => {
     await refreshNodeData();
   };
 
+  const handleForceDeleteNode = async () => {
+    const rn = resourceName();
+    if (!rn) return;
+    await forceDeleteNode(rn);
+    navigate(`/${encodeURIComponent(context())}/${encodeURIComponent(namespace())}/nodes`);
+    await loadNodes();
+  };
+
   const nodeActions = (): ResourceAction[] => {
     if (!resourceName()) return [];
 
@@ -190,6 +216,17 @@ const NodeListPage = () => {
         confirm: {
           title: 'Drain Node',
           message: `Drain "${resourceName()}"? This will cordon the node and evict all pods (except DaemonSets). Pods will be rescheduled to other nodes.`,
+        },
+      },
+      {
+        label: 'Force Delete',
+        variant: 'error',
+        tooltip: 'Remove all finalizers (including Karpenter NodeClaim) and delete the node. Use for nodes stuck in terminating state.',
+        icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z',
+        onClick: handleForceDeleteNode,
+        confirm: {
+          title: 'Force Delete Node',
+          message: `Force delete "${resourceName()}"? This will remove all finalizers (including the Karpenter NodeClaim finalizer) and delete the node immediately. Use this for nodes stuck in terminating state.`,
         },
       },
     ];
@@ -268,7 +305,7 @@ const NodeListPage = () => {
               <div class="p-6 flex-1 overflow-y-auto">
                 <Switch>
                   <Match when={tab() === 'info'}>
-                    <NodeInfoPanel node={nodeDetail()} loading={nodeDetailLoading()} />
+                    <NodeInfoPanel node={nodeDetail()} nodeClaim={nodeClaim()} loading={nodeDetailLoading()} />
                   </Match>
                   <Match when={tab() === 'manifest'}>
                     <ManifestViewer manifest={manifest()} loading={nodeDetailLoading()} />

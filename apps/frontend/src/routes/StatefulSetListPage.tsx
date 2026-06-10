@@ -182,8 +182,8 @@ const StatefulSetListPage = () => {
         setStatefulSets((prev) => sortStatefulSets(applyStatefulSetWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('StatefulSet stream error', error);
-        setStatefulSetsError(error.message);
+        if (error) console.error('StatefulSet stream error', error);
+        setStatefulSetsError(error?.message ?? '');
       }
     );
   });

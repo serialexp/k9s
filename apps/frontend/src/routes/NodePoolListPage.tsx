@@ -150,8 +150,8 @@ const NodePoolListPage = () => {
         setNodePools((prev) => sortNodePools(applyNodePoolWatchEvent(prev, event)));
       },
       (error) => {
-        console.error('NodePool stream error', error);
-        setNodePoolsError(error.message);
+        if (error) console.error('NodePool stream error', error);
+        setNodePoolsError(error?.message ?? '');
       }
     );
   });

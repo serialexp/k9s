@@ -37,6 +37,9 @@ import RolloutListPage from './routes/RolloutListPage';
 import VirtualServiceListPage from './routes/VirtualServiceListPage';
 import GatewayListPage from './routes/GatewayListPage';
 import DestinationRuleListPage from './routes/DestinationRuleListPage';
+import HelmReleaseListPage from './routes/HelmReleaseListPage';
+import ReplicaSetListPage from './routes/ReplicaSetListPage';
+import IngressClassListPage from './routes/IngressClassListPage';
 import ApplicationsPage from './routes/ApplicationsPage';
 
 const App = () => {
@@ -190,6 +193,22 @@ const App = () => {
           <Route path="/:context/:namespace/deployments/:resourceName/:tab" component={() => (
             <LayoutWrapper>
               <DeploymentListPage />
+            </LayoutWrapper>
+          )} />
+
+          <Route path="/:context/:namespace/replicasets" component={() => (
+            <LayoutWrapper>
+              <ReplicaSetListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/replicasets/:resourceName" component={() => (
+            <LayoutWrapper>
+              <ReplicaSetListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/replicasets/:resourceName/:tab" component={() => (
+            <LayoutWrapper>
+              <ReplicaSetListPage />
             </LayoutWrapper>
           )} />
 
@@ -378,6 +397,21 @@ const App = () => {
               <SecretListPage />
             </LayoutWrapper>
           )} />
+          <Route path="/:context/:namespace/helmreleases" component={() => (
+            <LayoutWrapper>
+              <HelmReleaseListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/helmreleases/:resourceName" component={() => (
+            <LayoutWrapper>
+              <HelmReleaseListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/helmreleases/:resourceName/:tab" component={() => (
+            <LayoutWrapper>
+              <HelmReleaseListPage />
+            </LayoutWrapper>
+          )} />
           <Route path="/:context/:namespace/hpas" component={() => (
             <LayoutWrapper>
               <HpaListPage />
@@ -481,6 +515,22 @@ const App = () => {
           <Route path="/:context/:namespace/storageclasses/:resourceName/:tab" component={() => (
             <LayoutWrapper>
               <StorageClassListPage />
+            </LayoutWrapper>
+          )} />
+
+          <Route path="/:context/:namespace/ingressclasses" component={() => (
+            <LayoutWrapper>
+              <IngressClassListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/ingressclasses/:resourceName" component={() => (
+            <LayoutWrapper>
+              <IngressClassListPage />
+            </LayoutWrapper>
+          )} />
+          <Route path="/:context/:namespace/ingressclasses/:resourceName/:tab" component={() => (
+            <LayoutWrapper>
+              <IngressClassListPage />
             </LayoutWrapper>
           )} />
 

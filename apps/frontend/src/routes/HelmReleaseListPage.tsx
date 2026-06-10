@@ -1,39 +1,48 @@
+// ABOUTME: Helm releases list page with real-time watch updates and detail panel
+// ABOUTME: Deduplicates watch events by release name, keeping only the highest revision
 import { batch, createEffect, createSignal, Match, onCleanup, Show, Switch } from 'solid-js';
 import { useNavigate, useParams } from '@solidjs/router';
 import ManifestViewer from '../components/ManifestViewer';
-import PersistentVolumeClaimTable from '../components/PersistentVolumeClaimTable';
-import ResourceActions, { type ResourceAction } from '../components/ResourceActions';
+import HelmReleaseTable from '../components/HelmReleaseTable';
 import { contextStore } from '../stores/contextStore';
 import {
   ApiError,
-  deletePersistentVolumeClaim,
-  fetchPersistentVolumeClaim,
-  fetchPersistentVolumeClaimManifest,
-  fetchPersistentVolumeClaims,
-  subscribeToPersistentVolumeClaimEvents,
-  type PersistentVolumeClaimDetail,
-  type PersistentVolumeClaimListItem,
-  type PersistentVolumeClaimWatchEvent
+  fetchHelmRelease,
+  fetchHelmReleaseManifest,
+  fetchHelmReleases,
+  subscribeToHelmReleaseEvents,
+  type HelmReleaseDetail,
+  type HelmReleaseListItem,
+  type HelmReleaseWatchEvent
 } from '../lib/api';
 
-const applyPersistentVolumeClaimWatchEvent = (pvcs: PersistentVolumeClaimListItem[], event: PersistentVolumeClaimWatchEvent): PersistentVolumeClaimListItem[] => {
+const applyHelmReleaseWatchEvent = (releases: HelmReleaseListItem[], event: HelmReleaseWatchEvent): HelmReleaseListItem[] => {
   const { type, object } = event;
   switch (type) {
     case 'ADDED':
-      return [...pvcs.filter((pvc) => pvc.name !== object.name), object];
-    case 'MODIFIED':
-      return pvcs.map((pvc) => (pvc.name === object.name ? object : pvc));
-    case 'DELETED':
-      return pvcs.filter((pvc) => pvc.name !== object.name);
+    case 'MODIFIED': {
+      const existing = releases.find((r) => r.name === object.name);
+      if (existing && existing.revision > object.revision) {
+        return releases;
+      }
+      return [...releases.filter((r) => r.name !== object.name), object];
+    }
+    case 'DELETED': {
+      const current = releases.find((r) => r.name === object.name);
+      if (current && current.revision === object.revision) {
+        return releases.filter((r) => r.name !== object.name);
+      }
+      return releases;
+    }
     default:
-      return pvcs;
+      return releases;
   }
 };
 
-const sortPersistentVolumeClaims = (pvcs: PersistentVolumeClaimListItem[]) =>
-  [...pvcs].sort((a, b) => a.name.localeCompare(b.name));
+const sortReleases = (releases: HelmReleaseListItem[]) =>
+  [...releases].sort((a, b) => a.name.localeCompare(b.name));
 
-const PersistentVolumeClaimListPage = () => {
+const HelmReleaseListPage = () => {
   const params = useParams<{ context: string; namespace: string; resourceName?: string; tab?: string }>();
   const navigate = useNavigate();
 
@@ -42,17 +51,17 @@ const PersistentVolumeClaimListPage = () => {
   const resourceName = () => (params.resourceName ? decodeURIComponent(params.resourceName) : undefined);
   const tab = () => params.tab || 'info';
 
-  const [pvcs, setPvcs] = createSignal<PersistentVolumeClaimListItem[]>([]);
-  const [pvcsLoading, setPvcsLoading] = createSignal(false);
-  const [pvcsError, setPvcsError] = createSignal<string>('');
+  const [releases, setReleases] = createSignal<HelmReleaseListItem[]>([]);
+  const [releasesLoading, setReleasesLoading] = createSignal(false);
+  const [releasesError, setReleasesError] = createSignal<string>('');
 
-  const [pvcDetail, setPvcDetail] = createSignal<PersistentVolumeClaimDetail | undefined>();
-  const [pvcDetailLoading, setPvcDetailLoading] = createSignal(false);
+  const [releaseDetail, setReleaseDetail] = createSignal<HelmReleaseDetail | undefined>();
+  const [releaseDetailLoading, setReleaseDetailLoading] = createSignal(false);
   const [manifest, setManifest] = createSignal<string>('');
 
   const [contextError, setContextError] = createSignal<string>('');
 
-  let unsubscribePvcStream: (() => void) | undefined;
+  let unsubscribeStream: (() => void) | undefined;
 
   createEffect(() => {
     const ctx = context();
@@ -91,43 +100,43 @@ const PersistentVolumeClaimListPage = () => {
     }
   });
 
-  const loadPvcs = async (ns: string) => {
-    setPvcsLoading(true);
-    setPvcsError('');
+  const loadReleases = async (ns: string) => {
+    setReleasesLoading(true);
+    setReleasesError('');
     try {
-      const items = await fetchPersistentVolumeClaims(ns);
-      const sorted = sortPersistentVolumeClaims(items);
-      setPvcs(sorted);
+      const items = await fetchHelmReleases(ns);
+      const sorted = sortReleases(items);
+      setReleases(sorted);
     } catch (error) {
-      console.error('Failed to load persistentvolumeclaims', error);
-      setPvcs([]);
+      console.error('Failed to load helm releases', error);
+      setReleases([]);
       if (error instanceof ApiError) {
-        setPvcsError(error.message);
+        setReleasesError(error.message);
       } else {
-        setPvcsError('Failed to load persistentvolumeclaims');
+        setReleasesError('Failed to load helm releases');
       }
     } finally {
-      setPvcsLoading(false);
+      setReleasesLoading(false);
     }
   };
 
-  const loadPvcDetail = async (ns: string, name: string) => {
-    setPvcDetailLoading(true);
+  const loadReleaseDetail = async (ns: string, name: string) => {
+    setReleaseDetailLoading(true);
     try {
       const [detail, manifestYaml] = await Promise.all([
-        fetchPersistentVolumeClaim(ns, name),
-        fetchPersistentVolumeClaimManifest(ns, name)
+        fetchHelmRelease(ns, name),
+        fetchHelmReleaseManifest(ns, name)
       ]);
       batch(() => {
-        setPvcDetail(detail);
+        setReleaseDetail(detail);
         setManifest(manifestYaml);
       });
     } catch (error) {
-      console.error('Failed to load persistentvolumeclaim detail', error);
-      setPvcDetail(undefined);
+      console.error('Failed to load helm release detail', error);
+      setReleaseDetail(undefined);
       setManifest('');
     } finally {
-      setPvcDetailLoading(false);
+      setReleaseDetailLoading(false);
     }
   };
 
@@ -138,23 +147,23 @@ const PersistentVolumeClaimListPage = () => {
     if (!ns || contextError()) return;
     if (contextStore.activeContext() !== ctx) return;
 
-    setPvcDetail(undefined);
+    setReleaseDetail(undefined);
     setManifest('');
 
-    void loadPvcs(ns);
+    void loadReleases(ns);
 
-    if (unsubscribePvcStream) {
-      unsubscribePvcStream();
+    if (unsubscribeStream) {
+      unsubscribeStream();
     }
 
-    unsubscribePvcStream = subscribeToPersistentVolumeClaimEvents(
+    unsubscribeStream = subscribeToHelmReleaseEvents(
       ns,
       (event) => {
-        setPvcs((prev) => sortPersistentVolumeClaims(applyPersistentVolumeClaimWatchEvent(prev, event)));
+        setReleases((prev) => sortReleases(applyHelmReleaseWatchEvent(prev, event)));
       },
       (error) => {
-        if (error) console.error('PersistentVolumeClaim stream error', error);
-        setPvcsError(error?.message ?? '');
+        if (error) console.error('Helm release stream error', error);
+        setReleasesError(error?.message ?? '');
       }
     );
   });
@@ -167,57 +176,22 @@ const PersistentVolumeClaimListPage = () => {
     if (!ns || !rn || contextError()) return;
     if (contextStore.activeContext() !== ctx) return;
 
-    void loadPvcDetail(ns, rn);
+    void loadReleaseDetail(ns, rn);
   });
 
   onCleanup(() => {
-    unsubscribePvcStream?.();
+    unsubscribeStream?.();
   });
 
-  const handlePvcSelect = (pvc: PersistentVolumeClaimListItem) => {
+  const handleReleaseSelect = (release: HelmReleaseListItem) => {
     const currentTab = tab();
-    navigate(`/${encodeURIComponent(context())}/${encodeURIComponent(namespace())}/persistentvolumeclaims/${encodeURIComponent(pvc.name)}/${currentTab}`);
+    navigate(`/${encodeURIComponent(context())}/${encodeURIComponent(namespace())}/helmreleases/${encodeURIComponent(release.name)}/${currentTab}`);
   };
 
   const handleTabChange = (tabName: string) => {
     if (resourceName()) {
-      navigate(`/${encodeURIComponent(context())}/${encodeURIComponent(namespace())}/persistentvolumeclaims/${encodeURIComponent(resourceName()!)}/${tabName}`);
+      navigate(`/${encodeURIComponent(context())}/${encodeURIComponent(namespace())}/helmreleases/${encodeURIComponent(resourceName()!)}/${tabName}`);
     }
-  };
-
-  const handleDeletePvc = async () => {
-    const rn = resourceName();
-    const ns = namespace();
-    if (!rn || !ns) return;
-
-    try {
-      await deletePersistentVolumeClaim(ns, rn);
-      navigate(`/${encodeURIComponent(context())}/${encodeURIComponent(ns)}/persistentvolumeclaims`);
-    } catch (error) {
-      console.error('Failed to delete persistentvolumeclaim', error);
-      if (error instanceof ApiError) {
-        setPvcsError(error.message);
-      } else {
-        setPvcsError('Failed to delete persistentvolumeclaim');
-      }
-    }
-  };
-
-  const pvcActions = (): ResourceAction[] => {
-    if (!resourceName()) return [];
-
-    return [
-      {
-        label: 'Delete',
-        variant: 'error',
-        icon: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
-        onClick: handleDeletePvc,
-        confirm: {
-          title: 'Delete PersistentVolumeClaim',
-          message: `Are you sure you want to delete PersistentVolumeClaim "${resourceName()}"? This action cannot be undone.`
-        }
-      }
-    ];
   };
 
   if (contextError()) {
@@ -246,23 +220,23 @@ const PersistentVolumeClaimListPage = () => {
   return (
     <main class="p-6">
       <div class="flex flex-col gap-6">
-        <Show when={pvcsError()}>
+        <Show when={releasesError()}>
           <div role="alert" class="alert alert-error">
             <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span>{pvcsError()}</span>
+            <span>{releasesError()}</span>
           </div>
         </Show>
         <section class="grid grid-cols-1 gap-6 xl:grid-cols-2 h-resource-panel">
           <div class="card bg-base-200/30 shadow-lg flex flex-col overflow-hidden">
             <div class="card-body flex-1 overflow-hidden">
               <div class="overflow-y-auto h-full">
-                <PersistentVolumeClaimTable
-                  pvcs={pvcs()}
-                  selectedPvc={resourceName()}
-                  loading={pvcsLoading()}
-                  onSelect={handlePvcSelect}
+                <HelmReleaseTable
+                  releases={releases()}
+                  selectedRelease={resourceName()}
+                  loading={releasesLoading()}
+                  onSelect={handleReleaseSelect}
                 />
               </div>
             </div>
@@ -287,64 +261,58 @@ const PersistentVolumeClaimListPage = () => {
                     Definition
                   </button>
                 </div>
-                <ResourceActions actions={pvcActions()} />
               </div>
               <div class="divider my-0 flex-shrink-0" />
               <div class="p-6 flex-1 overflow-y-auto">
                 <Switch>
                   <Match when={tab() === 'info'}>
-                    <Show when={!pvcDetailLoading()} fallback={<span class="loading loading-dots" />}>
+                    <Show when={!releaseDetailLoading()} fallback={<span class="loading loading-dots" />}>
                       <Show
-                        when={pvcDetail()}
-                        fallback={<p class="text-sm opacity-60">Select a PersistentVolumeClaim to view details.</p>}
+                        when={releaseDetail()}
+                        fallback={<p class="text-sm opacity-60">Select a Helm release to view details.</p>}
                       >
                         {(detail) => (
                           <div class="space-y-4">
                             <div>
-                              <h3 class="text-sm font-semibold mb-2">Basic Info</h3>
+                              <h3 class="text-sm font-semibold mb-2">Release Info</h3>
                               <div class="grid grid-cols-2 gap-2 text-sm">
                                 <div><span class="opacity-60">Name:</span> {detail().name}</div>
                                 <div><span class="opacity-60">Namespace:</span> {detail().namespace}</div>
-                                <div><span class="opacity-60">Status:</span> {detail().status}</div>
-                                <div><span class="opacity-60">StorageClass:</span> {detail().storageClass || '—'}</div>
-                                <div><span class="opacity-60">Requested:</span> {detail().storageRequest || detail().requestedStorage || '—'}</div>
-                                <div><span class="opacity-60">Capacity:</span> {detail().capacity || '—'}</div>
-                                <div><span class="opacity-60">Access Modes:</span> {detail().accessModes.join(', ') || '—'}</div>
-                                <div><span class="opacity-60">Volume:</span> {detail().volumeName || '—'}</div>
-                                <div><span class="opacity-60">Volume Mode:</span> {detail().volumeMode || '—'}</div>
-                                <div><span class="opacity-60">Storage Limit:</span> {detail().storageLimit || '—'}</div>
+                                <div><span class="opacity-60">Chart:</span> {detail().chart || '—'}</div>
+                                <div><span class="opacity-60">Chart Version:</span> {detail().chartVersion || '—'}</div>
+                                <div><span class="opacity-60">App Version:</span> {detail().appVersion || '—'}</div>
+                                <div>
+                                  <span class="opacity-60">Status:</span>{' '}
+                                  <span class={`badge badge-sm ${detail().status === 'deployed' ? 'badge-success' : detail().status === 'failed' ? 'badge-error' : 'badge-ghost'}`}>
+                                    {detail().status}
+                                  </span>
+                                </div>
+                                <div><span class="opacity-60">Revision:</span> {detail().revision}</div>
+                                <div><span class="opacity-60">Updated:</span> {detail().updated || '—'}</div>
                               </div>
                             </div>
-                            <div>
-                              <h3 class="text-sm font-semibold mb-2">Conditions</h3>
-                              <Show
-                                when={detail().conditions.length}
-                                fallback={<p class="text-sm opacity-60">No conditions reported.</p>}
-                              >
-                                <div class="space-y-2">
-                                  {detail().conditions.map((condition) => (
-                                    <div class="rounded-lg bg-base-200/40 p-3 text-sm">
-                                      <div><span class="opacity-60">Type:</span> {condition.type || '—'}</div>
-                                      <div><span class="opacity-60">Status:</span> {condition.status || '—'}</div>
-                                      <div><span class="opacity-60">Reason:</span> {condition.reason || '—'}</div>
-                                      <div><span class="opacity-60">Message:</span> {condition.message || '—'}</div>
-                                      <div><span class="opacity-60">Last Transition:</span> {condition.lastTransitionTime || '—'}</div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </Show>
-                            </div>
-                            <div>
-                              <h3 class="text-sm font-semibold mb-2">Selector</h3>
-                              <Show
-                                when={detail().selector}
-                                fallback={<p class="text-sm opacity-60">No selector specified.</p>}
-                              >
-                                <pre class="overflow-auto rounded-lg bg-base-200/40 p-3 text-xs">
-                                  {JSON.stringify(detail().selector, null, 2)}
+                            <Show when={detail().description}>
+                              <div>
+                                <h3 class="text-sm font-semibold mb-2">Description</h3>
+                                <p class="text-sm opacity-80">{detail().description}</p>
+                              </div>
+                            </Show>
+                            <Show when={detail().notes}>
+                              <div>
+                                <h3 class="text-sm font-semibold mb-2">Notes</h3>
+                                <pre class="text-xs opacity-80 whitespace-pre-wrap break-words bg-base-200/40 p-3 rounded-lg overflow-auto max-h-48">
+                                  {detail().notes}
                                 </pre>
-                              </Show>
-                            </div>
+                              </div>
+                            </Show>
+                            <Show when={detail().values && detail().values !== '{}'}>
+                              <div>
+                                <h3 class="text-sm font-semibold mb-2">Values</h3>
+                                <pre class="text-xs opacity-80 whitespace-pre-wrap break-words bg-base-200/40 p-3 rounded-lg overflow-auto max-h-64">
+                                  {detail().values}
+                                </pre>
+                              </div>
+                            </Show>
                             <div>
                               <h3 class="text-sm font-semibold mb-2">Metadata</h3>
                               <div class="grid grid-cols-2 gap-2 text-sm">
@@ -386,7 +354,8 @@ const PersistentVolumeClaimListPage = () => {
                     </Show>
                   </Match>
                   <Match when={tab() === 'manifest'}>
-                    <ManifestViewer manifest={manifest()} loading={pvcDetailLoading()} />
+                    {/* Read-only: this is Helm's internal release Secret, not a user resource. */}
+                    <ManifestViewer manifest={manifest()} loading={releaseDetailLoading()} editable={false} />
                   </Match>
                 </Switch>
               </div>
@@ -398,4 +367,4 @@ const PersistentVolumeClaimListPage = () => {
   );
 };
 
-export default PersistentVolumeClaimListPage;
+export default HelmReleaseListPage;
