@@ -4,16 +4,18 @@
   "version": "0.1.0",
   "type": "module",
   "workspaces": [
-    "apps/frontend",
-    "apps/backend"
+    "apps/*"
   ],
   "scripts": {
-    "dev": "concurrently \"pnpm --filter k9s-dashboard-backend dev\" \"pnpm --filter k9s-dashboard-frontend dev\"",
-    "dev:backend": "pnpm --filter k9s-dashboard-backend dev",
-    "dev:frontend": "pnpm --filter k9s-dashboard-frontend dev"
+    "dev": "concurrently \"bun run --filter k9s-dashboard-backend dev\" \"bun run --filter k9s-dashboard-frontend dev\"",
+    "dev:backend": "bun run --filter k9s-dashboard-backend dev",
+    "dev:frontend": "bun run --filter k9s-dashboard-frontend dev",
+    "sidecar:build": "node scripts/build-sidecar.mjs",
+    "desktop:prebuild": "bun run --filter k9s-dashboard-frontend build && bun run sidecar:build",
+    "desktop:dev": "bun run sidecar:build && concurrently -k -n backend,desktop \"PORT=3140 bun run dev:backend\" \"bun run --filter k9s-dashboard-desktop dev\"",
+    "desktop:build": "bun run --filter k9s-dashboard-desktop build"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
-  },
-  "packageManager": "pnpm@9.0.0"
+  }
 }

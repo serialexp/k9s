@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This is a TypeScript monorepo for a Kubernetes dashboard application built with:
 - **Frontend**: SolidJS + Tailwind CSS (DaisyUI) + Vite
 - **Backend**: Fastify + @kubernetes/client-node
-- **Package Manager**: pnpm with workspaces
+- **Package Manager**: Bun with workspaces
 
 ### Workspace Layout
 ```
@@ -29,17 +29,17 @@ apps/
 ## Common Development Commands
 
 ### Development
-- `pnpm dev` - Start both frontend and backend in development mode
-- `pnpm dev:frontend` - Start only frontend (port 3131)
-- `pnpm dev:backend` - Start only backend (port 3130)
+- `bun run dev` - Start both frontend and backend in development mode
+- `bun run dev:frontend` - Start only frontend (port 3131)
+- `bun run dev:backend` - Start only backend (port 3130)
 
 ### Building & Type Checking
-- **Frontend**: `pnpm --filter k9s-dashboard-frontend build` or `pnpm --filter k9s-dashboard-frontend typecheck`
-- **Backend**: `pnpm --filter k9s-dashboard-backend build` or `pnpm --filter k9s-dashboard-backend typecheck`
+- **Frontend**: `bun run --filter k9s-dashboard-frontend build` or `bun run --filter k9s-dashboard-frontend typecheck`
+- **Backend**: `bun run --filter k9s-dashboard-backend build` or `bun run --filter k9s-dashboard-backend typecheck`
 
 ### Production
-- `pnpm --filter k9s-dashboard-frontend preview` - Preview production build of frontend
-- `pnpm --filter k9s-dashboard-backend start` - Run built backend (requires prior build)
+- `bun run --filter k9s-dashboard-frontend preview` - Preview production build of frontend
+- `bun run --filter k9s-dashboard-backend start` - Run built backend (requires prior build)
 
 ## Architecture Notes
 
@@ -68,7 +68,7 @@ apps/
 ## Technology Stack
 - **Frontend**: SolidJS, Tailwind CSS v4, DaisyUI, Vite, TypeScript
 - **Backend**: Fastify, @kubernetes/client-node, TypeScript, tsx
-- **Monorepo**: pnpm workspaces, concurrently for dev orchestration
+- **Monorepo**: Bun workspaces, concurrently for dev orchestration
 
 ## Backend Service Architecture
 
