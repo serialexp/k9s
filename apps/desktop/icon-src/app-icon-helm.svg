@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <g transform="translate(96,96) scale(0.8125)">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3B7DEB"/>
+      <stop offset="1" stop-color="#2150B0"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <!-- specular highlight along the top-left bezel -->
+    <linearGradient id="specular" x1="0%" y1="0%" x2="50%" y2="50%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <!-- specular highlight along the bottom-right bezel -->
+    <linearGradient id="specular2" x1="100%" y1="100%" x2="50%" y2="50%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <!-- soft drop shadow into the icon-grid margin -->
+    <filter id="shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="10" stdDeviation="9" flood-color="#0b1f47" flood-opacity="0.34"/>
+    </filter>
+    <clipPath id="squircle">
+      <rect x="0" y="0" width="1024" height="1024" rx="232" ry="232"/>
+    </clipPath>
+  </defs>
+  <rect x="0" y="0" width="1024" height="1024" rx="232" ry="232" fill="url(#bg)" filter="url(#shadow)"/>
+  <rect x="0" y="0" width="1024" height="1024" rx="232" ry="232" fill="url(#sheen)"/>
+  <path d="M748 0 L232 0 A232 232 0 0 0 0 232 L0 748" fill="none" stroke="url(#specular)" stroke-width="9" stroke-linecap="round" clip-path="url(#squircle)"/>
+  <path d="M276 1024 L792 1024 A232 232 0 0 0 1024 792 L1024 276" fill="none" stroke="url(#specular2)" stroke-width="9" stroke-linecap="round" clip-path="url(#squircle)"/>
+  <g>
+    <circle cx="512.0" cy="145.0" r="48" fill="#ffffff"/><circle cx="798.9" cy="283.2" r="48" fill="#ffffff"/><circle cx="869.8" cy="593.7" r="48" fill="#ffffff"/><circle cx="671.2" cy="842.7" r="48" fill="#ffffff"/><circle cx="352.8" cy="842.7" r="48" fill="#ffffff"/><circle cx="154.2" cy="593.7" r="48" fill="#ffffff"/><circle cx="225.1" cy="283.2" r="48" fill="#ffffff"/>
+    <circle cx="512.0" cy="512.0" r="336" fill="none" stroke="#ffffff" stroke-width="50"/>
+    <line x1="512.0" y1="328.0" x2="512.0" y2="195.0" stroke="#ffffff" stroke-width="46" stroke-linecap="round"/><line x1="655.9" y1="397.3" x2="759.8" y2="314.4" stroke="#ffffff" stroke-width="46" stroke-linecap="round"/><line x1="691.4" y1="552.9" x2="821.1" y2="582.5" stroke="#ffffff" stroke-width="46" stroke-linecap="round"/><line x1="591.8" y1="677.8" x2="649.5" y2="797.6" stroke="#ffffff" stroke-width="46" stroke-linecap="round"/><line x1="432.2" y1="677.8" x2="374.5" y2="797.6" stroke="#ffffff" stroke-width="46" stroke-linecap="round"/><line x1="332.6" y1="552.9" x2="202.9" y2="582.5" stroke="#ffffff" stroke-width="46" stroke-linecap="round"/><line x1="368.1" y1="397.3" x2="264.2" y2="314.4" stroke="#ffffff" stroke-width="46" stroke-linecap="round"/>
+    <circle cx="512.0" cy="512.0" r="192" fill="#ffffff"/>
+    <ellipse cx="512.0" cy="581.125" rx="122.5" ry="101.5" fill="#FF7A3D"/><ellipse cx="375.5" cy="472.625" rx="45.5" ry="56.0" fill="#FF7A3D"/><ellipse cx="459.5" cy="399.125" rx="47.25" ry="57.75" fill="#FF7A3D"/><ellipse cx="564.5" cy="399.125" rx="47.25" ry="57.75" fill="#FF7A3D"/><ellipse cx="648.5" cy="472.625" rx="45.5" ry="56.0" fill="#FF7A3D"/>
+  </g>
+  </g>
+</svg>

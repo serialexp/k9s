@@ -33,3 +33,8 @@ pnpm-debug.log*
 
 # Vite
 .vite/
+
+# Tauri desktop
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/binaries/
+apps/desktop/src-tauri/gen/

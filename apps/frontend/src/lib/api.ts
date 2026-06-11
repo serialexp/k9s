@@ -1561,8 +1561,29 @@ export interface PortForward {
   connectionCount: number;
 }
 
-const API_BASE = '/api';
-const EVENTS_BASE = '/events';
+// Resolve the backend origin once. In a normal browser (the web build) we use
+// relative paths so Vite's dev proxy and same-origin prod serving keep working
+// exactly as before. Inside the Tauri webview there is no proxy, so we target
+// the sidecar backend directly on localhost.
+function resolveBackendOrigin(): string {
+  // Build-time override always wins (lets a packaged build point anywhere).
+  const envBase = import.meta.env.VITE_BACKEND_ORIGIN as string | undefined;
+  if (envBase) return envBase.replace(/\/$/, '');
+
+  const isTauri =
+    typeof window !== 'undefined' &&
+    ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
+  if (!isTauri) return ''; // web: relative '/api','/events' (unchanged)
+
+  // Tauri: the Rust side may inject the resolved sidecar port; default to 3140
+  // (the desktop backend port — offset from the web app's 3130 so both coexist).
+  const port = (window as unknown as { __K9S_BACKEND_PORT__?: number }).__K9S_BACKEND_PORT__ ?? 3140;
+  return `http://127.0.0.1:${port}`;
+}
+
+const BACKEND_ORIGIN = resolveBackendOrigin();
+const API_BASE = `${BACKEND_ORIGIN}/api`;
+const EVENTS_BASE = `${BACKEND_ORIGIN}/events`;
 
 export class ApiError extends Error {
   constructor(

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="apps/desktop/icon-src/app-icon-helm.svg" alt="k9s Dashboard" width="128" height="128" />
+</p>
+
 # k9s Dashboard
 
 A web-based Kubernetes dashboard built with SolidJS and Fastify. Provides a modern UI for viewing and managing Kubernetes resources with real-time updates.
@@ -52,12 +56,12 @@ Automatic detection and support for popular Kubernetes extensions:
 
 - **Frontend**: SolidJS, Tailwind CSS v4, DaisyUI, Vite, TypeScript
 - **Backend**: Fastify, @kubernetes/client-node, TypeScript
-- **Monorepo**: pnpm workspaces
+- **Monorepo**: Bun workspaces
 
 ## Prerequisites
 
-- Node.js 20+
-- pnpm 9+
+- Bun 1.3.14+ (package manager + script runner)
+- Node.js 20+ (the backend dev server runs under `tsx`/Node)
 - kubectl configured with at least one context
 - (Optional) AWS CLI configured for EKS cluster import
 
@@ -65,10 +69,10 @@ Automatic detection and support for popular Kubernetes extensions:
 
 ```bash
 # Install dependencies
-pnpm install
+bun install
 
 # Start development servers (frontend + backend)
-pnpm dev
+bun run dev
 ```
 
 The frontend runs on http://localhost:3131 and proxies API requests to the backend on port 3130.
@@ -77,21 +81,21 @@ The frontend runs on http://localhost:3131 and proxies API requests to the backe
 
 ```bash
 # Start both frontend and backend
-pnpm dev
+bun run dev
 
 # Start only frontend
-pnpm dev:frontend
+bun run dev:frontend
 
 # Start only backend
-pnpm dev:backend
+bun run dev:backend
 
 # Type check
-pnpm --filter k9s-dashboard-frontend typecheck
-pnpm --filter k9s-dashboard-backend typecheck
+bun run --filter k9s-dashboard-frontend typecheck
+bun run --filter k9s-dashboard-backend typecheck
 
 # Build
-pnpm --filter k9s-dashboard-frontend build
-pnpm --filter k9s-dashboard-backend build
+bun run --filter k9s-dashboard-frontend build
+bun run --filter k9s-dashboard-backend build
 ```
 
 ## Project Structure
