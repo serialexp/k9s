@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        # Build each target NATIVELY (no --target cross-compile). The backend
+        # sidecar (scripts/build-sidecar.mjs) is compiled for the runner's host
+        # triple only, so the runner arch must match the bundle arch. That's why
+        # the two macOS arches use separate runners instead of one with --target.
+        include:
+          - platform: 'macos-latest'  # Apple silicon (aarch64-apple-darwin)
+          - platform: 'macos-13'      # Intel (x86_64-apple-darwin)
+          - platform: 'ubuntu-22.04'  # x86_64-unknown-linux-gnu
+          - platform: 'windows-latest' # x86_64-pc-windows-msvc
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node is used to run scripts/build-sidecar.mjs (the bun-compile driver).
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      # Bun is the package manager AND compiles the backend into the sidecar.
+      # build-sidecar.mjs enforces bun >= 1.3.14 (older versions crash the
+      # process on the k8s websocket teardown).
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install workspace dependencies
+        run: bun install
+
+      # tauri-action runs `tauri build` inside apps/desktop. That triggers the
+      # beforeBuildCommand in tauri.conf.json, which builds the frontend and
+      # compiles the sidecar before bundling.
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: 'k9s Dashboard ${{ github.ref_name }}'
+          releaseBody: 'See the assets to download this version and install.'
+          releaseDraft: true
+          prerelease: false
