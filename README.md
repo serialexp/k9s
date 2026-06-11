@@ -8,6 +8,28 @@ A web-based Kubernetes dashboard built with SolidJS and Fastify. Provides a mode
 
 ![example](./example.jpg)
 
+## Install the desktop app
+
+The dashboard also ships as a desktop app (Tauri) with the backend bundled in as a sidecar — there's no separate server to run, it just uses your local kubeconfig. Use the one-line installer or grab a build from the [releases page](https://github.com/serialexp/k9s/releases).
+
+### Quick install (Linux / macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/serialexp/k9s/main/install.sh | bash
+```
+
+It detects your OS and architecture, downloads the latest release, and installs it (into `/Applications` on macOS; an AppImage + desktop entry, or a `.deb`, on Linux).
+
+### Manual install
+
+Download the matching asset from the [releases page](https://github.com/serialexp/k9s/releases):
+
+- **macOS** — the `.dmg` for your architecture (Apple Silicon `aarch64` or Intel `x64`)
+- **Linux** — the `.AppImage` (portable) or `.deb`
+- **Windows** — the `.msi` installer
+
+> **Note:** the builds are unsigned. On macOS, if Gatekeeper blocks the first launch, right-click the app and choose **Open** — or run `xattr -dr com.apple.quarantine "/Applications/k9s-dashboard.app"`. The one-line installer clears this for you.
+
 ## Features
 
 ### Core Kubernetes Resources
