@@ -15,7 +15,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -73,7 +79,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -131,7 +143,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -193,7 +211,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -250,7 +274,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -308,7 +338,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -365,7 +401,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -422,7 +464,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -479,7 +527,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -550,7 +604,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -607,7 +667,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -665,7 +731,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -722,7 +794,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -779,7 +857,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -836,7 +920,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -893,7 +983,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -950,7 +1046,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -1007,7 +1109,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -1068,7 +1176,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -1122,11 +1236,17 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     return reply;
   });
 
-  fastify.get('/crds', async (_request, reply) => {
+  fastify.get('/crds', async (request, reply) => {
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -1166,7 +1286,7 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
         return () => undefined;
       });
 
-    _request.raw.on('close', () => {
+    request.raw.on('close', () => {
       clearInterval(heartbeatInterval);
       abortController.abort();
       teardown?.();
@@ -1179,7 +1299,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -1232,7 +1358,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -1288,7 +1420,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -1342,7 +1480,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -1395,7 +1539,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -1448,7 +1598,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -1504,7 +1660,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -1561,7 +1723,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -1616,7 +1784,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -1669,7 +1843,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -1725,7 +1905,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -1786,7 +1972,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {
@@ -1847,7 +2039,13 @@ export const eventsPlugin: FastifyPluginAsync<EventPluginOptions> = async (fasti
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // SSE routes write headers straight to the raw socket, bypassing
+      // @fastify/cors (origin: true). Mirror its behaviour by reflecting the
+      // request origin, or the desktop webview (a cross-origin localhost page)
+      // silently drops every event and resource lists never populate.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const send = (data: string) => {

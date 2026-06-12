@@ -20,7 +20,11 @@ export const logsPlugin: FastifyPluginAsync<LogsPluginOptions> = async (fastify,
     reply.raw.writeHead(200, {
       'Content-Type': 'text/plain; charset=utf-8',
       Connection: 'keep-alive',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // Written straight to the raw socket, so @fastify/cors (origin: true) is
+      // bypassed — reflect the origin or the desktop webview can't read logs.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      Vary: 'Origin'
     });
 
     const abortController = new AbortController();
