@@ -89,15 +89,63 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
+/// Build a PATH that includes the common dirs where CLI auth helpers live
+/// (Homebrew on Apple silicon and Intel, the official AWS CLI installer's
+/// /usr/local/bin, ~/.local/bin), prepended to whatever PATH we inherited, with
+/// duplicates removed while preserving order. Covers the overwhelming majority
+/// of setups; users with asdf/mise/custom dirs are the follow-up (see TODO.md).
+#[cfg(all(not(debug_assertions), unix))]
+fn enriched_unix_path() -> String {
+    let mut dirs: Vec<String> = Vec::new();
+
+    if let Ok(home) = std::env::var("HOME") {
+        dirs.push(format!("{home}/.local/bin"));
+    }
+    for d in [
+        "/opt/homebrew/bin",
+        "/opt/homebrew/sbin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin",
+    ] {
+        dirs.push(d.to_string());
+    }
+    if let Ok(existing) = std::env::var("PATH") {
+        dirs.extend(existing.split(':').map(str::to_string));
+    }
+
+    let mut seen = std::collections::HashSet::new();
+    dirs.into_iter()
+        .filter(|d| !d.is_empty() && seen.insert(d.clone()))
+        .collect::<Vec<_>>()
+        .join(":")
+}
+
 #[cfg(not(debug_assertions))]
 fn spawn_backend_sidecar(handle: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let sidecar = handle
+    #[allow(unused_mut)]
+    let mut sidecar = handle
         .shell()
         .sidecar("k9s-backend")?
         .env("PORT", BACKEND_PORT.to_string())
         // Parity with the dev backend's TLS posture for EKS exec-credential
         // and self-signed endpoints. Revisit before shipping a signed product.
         .env("NODE_TLS_REJECT_UNAUTHORIZED", "0");
+
+    // A macOS app launched from Finder/Spotlight/dock inherits a minimal PATH
+    // (/usr/bin:/bin:/usr/sbin:/sbin) that omits Homebrew and other common
+    // install dirs. The kubeconfig exec credential plugins this app relies on
+    // (`aws eks get-token`, `gke-gcloud-auth-plugin`, `kubelogin`, ...) then
+    // can't be found, so every cluster call fails with `ENOENT: "aws"` and the
+    // UI shows "Failed to load nodes". Hand the sidecar an enriched PATH so the
+    // plugin (and anything it shells out to) resolves. The child still inherits
+    // HOME/etc., so ~/.kube and ~/.aws are read normally.
+    #[cfg(unix)]
+    {
+        sidecar = sidecar.env("PATH", enriched_unix_path());
+    }
 
     let (mut rx, _child) = sidecar.spawn()?;
 
