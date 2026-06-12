@@ -1,4 +1,4 @@
-import { batch, createEffect, createSignal, Match, onCleanup, Show, Switch } from 'solid-js';
+import { batch, createEffect, createSignal, Match, onCleanup, Switch } from 'solid-js';
 import { useNavigate, useParams } from '@solidjs/router';
 import DaemonSetTable from '../components/DaemonSetTable';
 import DaemonSetInfoPanel from '../components/DaemonSetInfoPanel';
@@ -23,6 +23,7 @@ import {
   type DaemonSetStatus,
   type DaemonSetWatchEvent
 } from '../lib/api';
+import ResourceListLayout from '../components/ResourceListLayout';
 
 const applyDaemonSetWatchEvent = (daemonSets: DaemonSetListItem[], event: DaemonSetWatchEvent): DaemonSetListItem[] => {
   const { type, object } = event;
@@ -265,31 +266,8 @@ const DaemonSetListPage = () => {
     ];
   };
 
-  if (contextError()) {
-    return (
-      <main class="p-6">
-        <div class="alert alert-error max-w-xl">
-          <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span>{contextError()}</span>
-        </div>
-      </main>
-    );
-  }
-
   return (
-    <main class="p-6">
-      <div class="flex flex-col gap-6">
-        <Show when={daemonSetsError()}>
-          <div role="alert" class="alert alert-error">
-            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span>{daemonSetsError()}</span>
-          </div>
-        </Show>
-        <section class="grid grid-cols-1 gap-6 xl:grid-cols-2 h-resource-panel">
+    <ResourceListLayout contextError={contextError()} error={daemonSetsError()}>
           <div class="card bg-base-200/30 shadow-lg flex flex-col overflow-hidden">
             <div class="card-body flex-1 overflow-hidden">
               <div class="overflow-y-auto h-full">
@@ -357,9 +335,7 @@ const DaemonSetListPage = () => {
               </div>
             </div>
           </div>
-        </section>
-      </div>
-    </main>
+    </ResourceListLayout>
   );
 };
 

@@ -1,4 +1,4 @@
-import { batch, createEffect, createSignal, Match, onCleanup, Show, Switch } from 'solid-js';
+import { batch, createEffect, createSignal, Match, onCleanup, Switch } from 'solid-js';
 import { useNavigate, useParams } from '@solidjs/router';
 import ExternalSecretTable from '../components/ExternalSecretTable';
 import ExternalSecretInfoPanel from '../components/ExternalSecretInfoPanel';
@@ -22,6 +22,7 @@ import {
   type ExternalSecretStatus,
   type ExternalSecretWatchEvent
 } from '../lib/api';
+import ResourceListLayout from '../components/ResourceListLayout';
 
 const applyExternalSecretWatchEvent = (externalsecrets: ExternalSecretListItem[], event: ExternalSecretWatchEvent): ExternalSecretListItem[] => {
   const { type, object } = event;
@@ -235,41 +236,8 @@ const ExternalSecretListPage = () => {
     ];
   };
 
-  if (contextError()) {
-    return (
-      <main class="p-6">
-        <div class="flex items-center justify-center min-h-[50vh]">
-          <div class="card bg-base-200 shadow-xl max-w-md">
-            <div class="card-body text-center">
-              <h2 class="card-title justify-center text-error">Route Not Found</h2>
-              <p class="opacity-70">{contextError()}</p>
-              <div class="card-actions justify-center mt-4">
-                <button
-                  class="btn btn-primary"
-                  onClick={() => navigate('/', { replace: true })}
-                >
-                  Go to Default View
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
   return (
-    <main class="p-6">
-      <div class="flex flex-col gap-6">
-        <Show when={externalsecretsError()}>
-          <div role="alert" class="alert alert-error">
-            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span>{externalsecretsError()}</span>
-          </div>
-        </Show>
-        <section class="grid grid-cols-1 gap-6 xl:grid-cols-2 h-resource-panel">
+    <ResourceListLayout contextError={contextError()} error={externalsecretsError()}>
           <div class="card bg-base-200/30 shadow-lg flex flex-col overflow-hidden">
             <div class="card-body flex-1 overflow-hidden">
               <div class="overflow-y-auto h-full">
@@ -337,9 +305,7 @@ const ExternalSecretListPage = () => {
               </div>
             </div>
           </div>
-        </section>
-      </div>
-    </main>
+    </ResourceListLayout>
   );
 };
 
