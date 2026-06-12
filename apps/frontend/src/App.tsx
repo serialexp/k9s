@@ -48,11 +48,11 @@ const App = () => {
   });
 
   return (
-    <div class="min-h-screen bg-backdrop text-base-content">
+    <div class="h-screen flex flex-col overflow-hidden bg-backdrop text-base-content">
       <Show
         when={contextStore.appInitialized()}
         fallback={
-          <div class="min-h-screen flex items-center justify-center">
+          <div class="flex-1 flex items-center justify-center">
             <div class="text-center">
               <Show when={contextStore.initializationError()}>
                 <div class="alert alert-error mb-4 max-w-md">

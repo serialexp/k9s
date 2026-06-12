@@ -104,7 +104,7 @@ const AppHeader = (props: AppHeaderProps) => {
   ];
 
   return (
-    <header class="bg-base-200/60 backdrop-blur-md sticky top-0 z-30 border-b border-base-300/50">
+    <header class="bg-base-200/60 backdrop-blur-md shrink-0 z-30 border-b border-base-300/50">
       <div class="flex items-center justify-between px-4 py-2">
         <div class="text-xl font-semibold">K9s Dashboard</div>
         <div class="flex items-center justify-end gap-2">
