@@ -3,7 +3,7 @@
 
 use std::sync::Mutex;
 
-use tauri::State;
+use tauri::{State, WebviewUrl, WebviewWindowBuilder};
 
 #[cfg(not(debug_assertions))]
 use tauri_plugin_shell::{process::CommandEvent, ShellExt};
@@ -13,6 +13,15 @@ use tauri_plugin_shell::{process::CommandEvent, ShellExt};
 /// `bun run dev`. Fixed for now; a future change can allocate a free port here and
 /// inject it into the webview.
 const BACKEND_PORT: u16 = 3140;
+
+/// In release builds the frontend assets are served over a real `http://localhost`
+/// server (tauri-plugin-localhost) instead of the default `tauri://` custom
+/// protocol. WKWebView treats the custom protocol as a *secure* context, which
+/// makes plain-`http://` calls to the sidecar (fetch AND EventSource/SSE) fail as
+/// mixed content. Serving the UI over http restores same-scheme http→http access.
+/// Dev is unaffected: Vite already serves the UI over http://localhost:3141.
+#[cfg(not(debug_assertions))]
+const UI_PORT: u16 = 3150;
 
 struct BackendPort(Mutex<u16>);
 
@@ -25,8 +34,18 @@ fn backend_port(state: State<BackendPort>) -> u16 {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
+    #[allow(unused_mut)]
+    let mut builder = tauri::Builder::default().plugin(tauri_plugin_shell::init());
+
+    // Serve the bundled frontend over http://localhost in release so the webview
+    // is an http origin and can reach the http sidecar without mixed-content
+    // blocking. Not used in dev (the window loads the Vite devUrl directly).
+    #[cfg(not(debug_assertions))]
+    {
+        builder = builder.plugin(tauri_plugin_localhost::Builder::new(UI_PORT).build());
+    }
+
+    builder
         .manage(BackendPort(Mutex::new(BACKEND_PORT)))
         .invoke_handler(tauri::generate_handler![backend_port])
         .setup(|app| {
@@ -44,6 +63,25 @@ pub fn run() {
             // self-contained Bun-compiled backend so the app is standalone.
             #[cfg(not(debug_assertions))]
             spawn_backend_sidecar(app.handle())?;
+
+            // Create the main window programmatically so we can point release
+            // builds at the localhost asset server (External URL) while dev loads
+            // the Vite devUrl via the default app URL. Label "main" matches the
+            // capabilities file.
+            #[cfg(not(debug_assertions))]
+            let url = WebviewUrl::External(
+                format!("http://localhost:{UI_PORT}")
+                    .parse()
+                    .expect("valid localhost URL"),
+            );
+            #[cfg(debug_assertions)]
+            let url = WebviewUrl::App("index.html".into());
+
+            WebviewWindowBuilder::new(app, "main", url)
+                .title("k9s Dashboard")
+                .inner_size(1400.0, 900.0)
+                .resizable(true)
+                .build()?;
 
             Ok(())
         })

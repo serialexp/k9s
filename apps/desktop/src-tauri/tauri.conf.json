@@ -10,16 +10,8 @@
     "beforeBuildCommand": "bun run --filter k9s-dashboard-frontend build && node ../../scripts/build-sidecar.mjs"
   },
   "app": {
-    "windows": [
-      {
-        "label": "main",
-        "title": "k9s Dashboard",
-        "width": 1400,
-        "height": 900,
-        "resizable": true,
-        "fullscreen": false
-      }
-    ],
+    "withGlobalTauri": true,
+    "windows": [],
     "security": {
       "csp": null
     }
