@@ -353,6 +353,7 @@ const LogViewer = (props: LogViewerProps) => {
   const [selectedContainer, setSelectedContainer] = createSignal<string>('');
   const [showPrevious, setShowPrevious] = createSignal(false);
   const [isStreaming, setIsStreaming] = createSignal(false);
+  const [connected, setConnected] = createSignal(false);
   const [autoScroll, setAutoScroll] = createSignal(true);
   const [filterText, setFilterText] = createSignal('');
 
@@ -433,11 +434,13 @@ const LogViewer = (props: LogViewerProps) => {
     if (!isActive || !namespace || !pod || !container) {
       setEntries([]);
       setIsStreaming(false);
+      setConnected(false);
       return;
     }
 
     setEntries([]);
     setIsStreaming(true);
+    setConnected(false);
     let buffer = '';
 
     const stop = streamPodLogs({
@@ -446,6 +449,9 @@ const LogViewer = (props: LogViewerProps) => {
       container,
       previous,
       follow: !previous,
+      onOpen: () => {
+        setConnected(true);
+      },
       onChunk: (chunk) => {
         buffer += chunk;
         const lines = buffer.split('\n');
@@ -465,10 +471,12 @@ const LogViewer = (props: LogViewerProps) => {
       },
       onComplete: () => {
         setIsStreaming(false);
+        setConnected(false);
       },
       onError: (error) => {
         console.error('Log streaming failed:', error);
         setIsStreaming(false);
+        setConnected(false);
       }
     });
 
@@ -476,6 +484,7 @@ const LogViewer = (props: LogViewerProps) => {
       stop();
       buffer = '';
       setIsStreaming(false);
+      setConnected(false);
     });
   });
 
@@ -604,7 +613,22 @@ const LogViewer = (props: LogViewerProps) => {
   return (
     <div class="flex flex-col h-full relative">
       <div class="flex items-center justify-between flex-shrink-0 mb-4 gap-2">
-        <h2 class="text-lg font-semibold shrink-0">Logs</h2>
+        <h2 class="text-lg font-semibold shrink-0 flex items-center gap-2">
+          Logs
+          <Show when={connected()}>
+            <span
+              class="relative flex h-2.5 w-2.5"
+              title="Connected — streaming live logs"
+              aria-label="Connected — streaming live logs"
+            >
+              <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+              <span
+                class="relative inline-flex h-2.5 w-2.5 rounded-full bg-success"
+                style={{ 'box-shadow': '0 0 6px 1px var(--color-success)' }}
+              />
+            </span>
+          </Show>
+        </h2>
         <div class="relative flex-1 max-w-xs">
           <input
             type="text"
@@ -695,7 +719,7 @@ const LogViewer = (props: LogViewerProps) => {
           when={props.namespace && props.pod}
           fallback={<p class="text-sm opacity-60">Select a pod to view logs.</p>}
         >
-          <Show when={entries().length} fallback={isStreaming() ? <span class="loading loading-dots" /> : <p class="text-sm opacity-60">No log entries yet.</p>}>
+          <Show when={entries().length} fallback={isStreaming() && !connected() ? <span class="loading loading-dots" /> : <p class="text-sm opacity-60">No log entries yet.</p>}>
             <Show when={filteredEntries().length || !filterText()} fallback={<p class="text-sm opacity-60">No entries match "{filterText()}"</p>}>
               {content()}
             </Show>

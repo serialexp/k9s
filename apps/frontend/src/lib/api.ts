@@ -3325,6 +3325,7 @@ export interface LogStreamOptions {
   tailLines?: number;
   previous?: boolean;
   onChunk: (chunk: string) => void;
+  onOpen?: () => void;
   onComplete?: () => void;
   onError?: (error: Error) => void;
 }
@@ -3346,7 +3347,7 @@ export interface EksCluster {
 }
 
 export function streamPodLogs(options: LogStreamOptions): () => void {
-  const { namespace, pod, container, follow = true, tailLines = 200, previous = false, onChunk, onComplete, onError } = options;
+  const { namespace, pod, container, follow = true, tailLines = 200, previous = false, onChunk, onOpen, onComplete, onError } = options;
   const controller = new AbortController();
 
   void fetch(
@@ -3359,6 +3360,10 @@ export function streamPodLogs(options: LogStreamOptions): () => void {
       if (!response.ok || !response.body) {
         throw new Error(`Failed to stream logs (${response.status})`);
       }
+
+      // Headers received -> the backend stream is open (even if no log bytes
+      // have arrived yet). Lets the UI flip from "connecting" to "connected".
+      onOpen?.();
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();

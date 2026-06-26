@@ -27,6 +27,11 @@ export const logsPlugin: FastifyPluginAsync<LogsPluginOptions> = async (fastify,
       Vary: 'Origin'
     });
 
+    // Follow streams may produce no bytes for a long time (quiet pod). Flush the
+    // headers now so the client's fetch resolves immediately and can show a
+    // "connected, waiting" state instead of an indefinite loading spinner.
+    reply.raw.flushHeaders();
+
     const abortController = new AbortController();
     const teardown = kube.streamPodLogs({
       namespace,
