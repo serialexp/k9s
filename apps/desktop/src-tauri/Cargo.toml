@@ -1,6 +1,6 @@
 [package]
 name = "k9s-dashboard-desktop"
-version = "0.1.0"
+version = "0.1.1"
 description = "k9s Dashboard desktop app"
 authors = ["Bart Riepe"]
 license = ""
