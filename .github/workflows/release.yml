@@ -7,7 +7,53 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Gate the whole release on the tag and every version-bearing manifest
+  # agreeing. Tauri names the bundle assets from the app version in the
+  # manifests (NOT the git tag), so a stale manifest silently ships assets
+  # named for the wrong version. Fail fast, once, before spinning up the
+  # per-platform build matrix. Skipped on manual workflow_dispatch (no tag).
+  verify-version:
+    name: Verify version matches tag
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check manifest versions match the tag
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          echo "Tag version: $tag"
+
+          tauri=$(jq -r '.version' apps/desktop/src-tauri/tauri.conf.json)
+          root_pkg=$(jq -r '.version' package.json)
+          desktop_pkg=$(jq -r '.version' apps/desktop/package.json)
+          cargo=$(grep -m1 '^version = ' apps/desktop/src-tauri/Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+
+          fail=0
+          check() {
+            local name="$1" ver="$2"
+            printf '%-32s %s\n' "$name" "$ver"
+            if [ "$ver" != "$tag" ]; then
+              echo "::error::$name version ($ver) does not match tag ($tag)"
+              fail=1
+            fi
+          }
+          check "apps/desktop/src-tauri/tauri.conf.json" "$tauri"
+          check "package.json"                           "$root_pkg"
+          check "apps/desktop/package.json"              "$desktop_pkg"
+          check "apps/desktop/src-tauri/Cargo.toml"      "$cargo"
+
+          if [ "$fail" -ne 0 ]; then
+            echo "Version mismatch: bump every manifest to match the tag ($tag) before publishing."
+            exit 1
+          fi
+          echo "All versions match $tag"
+
   release:
+    # Run only if the version check passed (tag push) or was skipped
+    # (manual workflow_dispatch, where there is no tag to compare against).
+    needs: verify-version
+    if: always() && (needs.verify-version.result == 'success' || needs.verify-version.result == 'skipped')
     permissions:
       contents: write
     strategy:
